@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* [FIX] Menambahkan aturan khusus untuk tombol filter */
+@layer components {
+    .filter-button-group .filter-button {
+        @apply relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium transition ease-in-out duration-150;
+    }
+
+    /* Gaya untuk Tombol TIDAK AKTIF */
+    .filter-button-group .filter-button:not(.active) {
+        @apply bg-white text-gray-700 hover:bg-gray-50;
+    }
+
+    /* Gaya untuk Tombol TIDAK AKTIF dalam mode gelap */
+    .dark .filter-button-group .filter-button:not(.active) {
+        @apply dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600;
+    }
+
+    /* Gaya untuk Tombol AKTIF (berlaku di mode terang & gelap) */
+    .filter-button-group .filter-button.active {
+        @apply bg-indigo-600 text-white border-indigo-600;
+    }
+}

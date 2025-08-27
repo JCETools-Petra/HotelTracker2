@@ -1,0 +1,2 @@
+[04-Jun-2025 06:20:11 Asia/Jakarta] PHP Fatal error:  Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 8.1.32. in /home/apsx2353/public_html/hoteliermarket.my.id/vendor/composer/platform_check.php on line 28
+[04-Jun-2025 06:20:54 Asia/Jakarta] PHP Fatal error:  Composer detected issues in your platform: Your Composer dependencies require a PHP version ">= 8.2.0". You are running 8.1.32. in /home/apsx2353/public_html/hoteliermarket.my.id/vendor/composer/platform_check.php on line 28
