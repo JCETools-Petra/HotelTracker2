@@ -36,7 +36,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () {
     if (Auth::check()) {
         $user = Auth::user();
-        if ($user->role === 'admin' || $user->role === 'owner') {
+        if (in_array($user->role, ['admin', 'owner', 'pengurus'])) {
             return redirect()->route('admin.dashboard');
         } elseif ($user->role === 'pengguna_properti') {
             return redirect()->route('property.dashboard');
@@ -59,7 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/dashboard', function () {
         $user = Auth::user();
-        if ($user->role === 'admin' || $user->role === 'owner') {
+        if (in_array($user->role, ['admin', 'owner', 'pengurus'])) {
             return redirect()->route('admin.dashboard');
         } elseif ($user->role === 'pengguna_properti') {
             return redirect()->route('property.dashboard');
@@ -76,16 +76,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 require __DIR__ . '/auth.php';
 
-// Route Admin
-Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->name('admin.')->group(function () {
+
+// Grup 1: Halaman Laporan (Bisa dilihat oleh Admin, Owner, dan Pengurus)
+Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner,pengurus'])->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
-    Route::get('/dashboard/export/excel', [AdminDashboardController::class, 'exportPropertiesSummaryExcel'])->name('dashboard.export.excel');
-    Route::get('/dashboard/export/csv', [AdminDashboardController::class, 'exportPropertiesSummaryCsv'])->name('dashboard.export.csv');
-    
     Route::get('/kpi-analysis', [AdminDashboardController::class, 'kpiAnalysis'])->name('kpi.analysis');
-    Route::get('/sales-analytics', [AdminDashboardController::class, 'salesAnalytics'])->name('sales.analytics');
+    Route::get('/kpi-analysis/export', [AdminDashboardController::class, 'exportKpiAnalysis'])->name('kpi.analysis.export');
     Route::get('/properties/compare', [AdminPropertyController::class, 'showComparisonForm'])->name('properties.compare_page');
     Route::get('/properties/compare/results', [AdminPropertyController::class, 'showComparisonResults'])->name('properties.compare.results');
+    Route::get('properties/{property}', [AdminPropertyController::class, 'show'])->name('properties.show');
+});
+
+// Grup 2: Halaman Manajemen (HANYA bisa diakses oleh Admin dan Owner)
+Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->name('admin.')->group(function () {
+    Route::get('/dashboard/export/excel', [AdminDashboardController::class, 'exportPropertiesSummaryExcel'])->name('dashboard.export.excel');
+    Route::get('/dashboard/export/csv', [AdminDashboardController::class, 'exportPropertiesSummaryCsv'])->name('dashboard.export.csv');
+    Route::get('/sales-analytics', [AdminDashboardController::class, 'salesAnalytics'])->name('sales.analytics');
     Route::get('/calendar/unified', [AdminDashboardController::class, 'unifiedCalendar'])->name('calendar.unified');
     Route::get('/calendar/unified/events', [AdminDashboardController::class, 'getUnifiedCalendarEvents'])->name('calendar.unified.events');
 
@@ -94,13 +100,20 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
     Route::post('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
     Route::delete('/users/{user}/force-delete', [AdminUserController::class, 'forceDelete'])->name('users.force-delete');
     
-    Route::resource('properties', AdminPropertyController::class);
+    Route::resource('properties', AdminPropertyController::class)->except(['show']);
     Route::resource('revenue-targets', RevenueTargetController::class);
     Route::resource('targets', TargetController::class);
     Route::resource('mice-categories', MiceCategoryController::class);
     Route::resource('price-packages', PricePackageController::class);
-    Route::resource('inventories', AdminInventoryController::class);
     
+    Route::get('/inventories/select', [AdminInventoryController::class, 'showPropertySelection'])->name('inventories.select');
+    Route::get('/properties/{property}/inventories', [AdminInventoryController::class, 'index'])->name('inventories.index');
+    Route::get('/properties/{property}/inventories/create', [AdminInventoryController::class, 'create'])->name('inventories.create');
+    Route::post('/properties/{property}/inventories', [AdminInventoryController::class, 'store'])->name('inventories.store');
+    Route::get('/inventories/{inventory}/edit', [AdminInventoryController::class, 'edit'])->name('inventories.edit');
+    Route::put('/inventories/{inventory}', [AdminInventoryController::class, 'update'])->name('inventories.update');
+    Route::delete('/inventories/{inventory}', [AdminInventoryController::class, 'destroy'])->name('inventories.destroy');
+
     Route::get('/reports/amenities', [AdminInventoryController::class, 'report'])->name('reports.amenities');
     Route::get('/activity-log', [ActivityLogController::class, 'index'])->name('activity_log.index');
     
@@ -121,9 +134,8 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
     });
 });
 
-
 // Route Sales
-Route::prefix('sales')->middleware(['auth', 'verified', 'role:sales,owner'])->name('sales.')->group(function () {
+Route::prefix('sales')->middleware(['auth', 'verified', 'role:admin,sales,owner'])->name('sales.')->group(function () {
     Route::get('/dashboard', [SalesDashboardController::class, 'index'])->name('dashboard');
     Route::resource('bookings', BookingController::class);
     Route::get('/bookings/{booking}/download-beo', [BookingController::class, 'downloadBeo'])->name('bookings.download_beo');

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Notifications\CustomVerifyEmail; // <-- TAMBAHKAN INI
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -62,14 +61,4 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     return $this->role === 'hk';
 }
-
-    /**
-     * Mengirim notifikasi verifikasi email kustom.
-     * Override metode bawaan untuk menggunakan template email kita.
-     */
-    public function sendEmailVerificationNotification()
-    {
-        $this->notify(new CustomVerifyEmail);
-    }
 }
-

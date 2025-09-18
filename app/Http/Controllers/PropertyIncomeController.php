@@ -104,6 +104,7 @@ class PropertyIncomeController extends Controller
         ]);
     }
 
+
     public function updateOccupancy(Request $request)
     {
         $user = Auth::user();
@@ -211,6 +212,7 @@ class PropertyIncomeController extends Controller
         return view('property.income.index', compact('incomes', 'property', 'startDate', 'endDate'));
     }
 
+
     public function create()
     {
         $user = Auth::user();
@@ -260,38 +262,20 @@ class PropertyIncomeController extends Controller
             'date.unique' => 'Pendapatan untuk tanggal ini sudah pernah dicatat.',
         ]);
     
-        $total_rooms_sold =
-            (int)$validatedData['offline_rooms'] + (int)$validatedData['online_rooms'] + (int)$validatedData['ta_rooms'] +
-            (int)$validatedData['gov_rooms'] + (int)$validatedData['corp_rooms'] + (int)$validatedData['compliment_rooms'] +
-            (int)$validatedData['house_use_rooms'] + (int)$validatedData['afiliasi_rooms'];
-    
-        $total_rooms_revenue =
-            (float)$validatedData['offline_room_income'] + (float)$validatedData['online_room_income'] + (float)$validatedData['ta_income'] +
-            (float)$validatedData['gov_income'] + (float)$validatedData['corp_income'] + (float)$validatedData['compliment_income'] +
-            (float)$validatedData['house_use_income'] + (float)$validatedData['afiliasi_room_income'];
-    
-        $total_fb_revenue = (float)$validatedData['breakfast_income'] + (float)$validatedData['lunch_income'] + (float)$validatedData['dinner_income'];
-    
-        $total_revenue = $total_rooms_revenue + $total_fb_revenue + (float)$validatedData['others_income'];
-    
-        $arr = ($total_rooms_sold > 0) ? ($total_rooms_revenue / $total_rooms_sold) : 0;
-        $occupancy = ($property->total_rooms > 0) ? ($total_rooms_sold / $property->total_rooms) * 100 : 0;
-    
+        // Hapus semua perhitungan manual dari sini
         $incomeData = array_merge($validatedData, [
             'property_id' => $property->id,
             'user_id' => $user->id,
-            'total_rooms_sold' => $total_rooms_sold,
-            'total_rooms_revenue' => $total_rooms_revenue,
-            'total_fb_revenue' => $total_fb_revenue,
-            'total_revenue' => $total_revenue,
-            'arr' => $arr,
-            'occupancy' => $occupancy,
         ]);
     
-        DailyIncome::create($incomeData);
+        $income = DailyIncome::create($incomeData);
     
-        $formattedDate = Carbon::parse($incomeData['date'])->isoFormat('D MMMM YYYY');
-        $this->logActivity('Mencatat pendapatan harian baru untuk tanggal ' . $formattedDate, $request);
+        // Panggil method kalkulasi terpusat dari model
+        $income->recalculateTotals();
+        $income->save(); // Simpan setelah kalkulasi
+    
+        $formattedDate = Carbon::parse($income->date)->isoFormat('D MMMM YYYY');
+        $this->logActivity('Mencatat pendapatan harian baru untuk tanggal ' . $formattedDate, $request, $property->id);
 
         return redirect()->route('property.income.index')->with('success', 'Pendapatan harian berhasil dicatat.');
     }
@@ -312,9 +296,7 @@ class PropertyIncomeController extends Controller
     public function update(Request $request, DailyIncome $income)
     {
         $user = Auth::user();
-        if ($user->role !== 'admin' && $user->property_id != $income->property_id) {
-            abort(403, 'Akses tidak diizinkan untuk memperbarui data ini.');
-        }
+        $this->authorize('update', $income);
     
         $validatedData = $request->validate([
             'date' => 'required|date|unique:daily_incomes,date,' . $income->id . ',id,property_id,' . $income->property_id,
@@ -334,27 +316,15 @@ class PropertyIncomeController extends Controller
             'date.unique' => 'Pendapatan untuk tanggal ini sudah ada.',
         ]);
     
-        $property = $income->property;
-        $total_rooms_sold = (int)$validatedData['offline_rooms'] + (int)$validatedData['online_rooms'] + (int)$validatedData['ta_rooms'] + (int)$validatedData['gov_rooms'] + (int)$validatedData['corp_rooms'] + (int)$validatedData['compliment_rooms'] + (int)$validatedData['house_use_rooms'] + (int)$validatedData['afiliasi_rooms'];
-        $total_rooms_revenue = (float)$validatedData['offline_room_income'] + (float)$validatedData['online_room_income'] + (float)$validatedData['ta_income'] + (float)$validatedData['gov_income'] + (float)$validatedData['corp_income'] + (float)$validatedData['compliment_income'] + (float)$validatedData['house_use_income'] + (float)$validatedData['afiliasi_room_income'];
-        $total_fb_revenue = (float)$validatedData['breakfast_income'] + (float)$validatedData['lunch_income'] + (float)$validatedData['dinner_income'];
-        $total_revenue = $total_rooms_revenue + $total_fb_revenue + (float)$validatedData['others_income'];
-        $arr = ($total_rooms_sold > 0) ? ($total_rooms_revenue / $total_rooms_sold) : 0;
-        $occupancy = ($property->total_rooms > 0) ? ($total_rooms_sold / $property->total_rooms) * 100 : 0;
-    
-        $updateData = array_merge($validatedData, [
-            'total_rooms_sold' => $total_rooms_sold,
-            'total_rooms_revenue' => $total_rooms_revenue,
-            'total_fb_revenue' => $total_fb_revenue,
-            'total_revenue' => $total_revenue,
-            'arr' => $arr,
-            'occupancy' => $occupancy,
-        ]);
-        
-        $income->update($updateData);
+        // Hapus semua perhitungan manual dari sini
+        $income->update($validatedData);
 
+        // Panggil method kalkulasi terpusat dari model
+        $income->recalculateTotals();
+        $income->save(); // Simpan setelah kalkulasi
+    
         $formattedDate = Carbon::parse($income->date)->isoFormat('D MMMM YYYY');
-        $this->logActivity('Memperbarui data pendapatan harian untuk tanggal ' . $formattedDate, $request);
+        $this->logActivity('Memperbarui data pendapatan harian untuk tanggal ' . $formattedDate, $request, $income->property_id);
     
         if ($user->role === 'admin') {
             return redirect()->route('admin.properties.show', $income->property_id)->with('success', 'Data pendapatan berhasil diperbarui.');

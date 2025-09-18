@@ -81,25 +81,28 @@
         </div>
     </div>
 
+    {{-- Di bagian paling bawah file --}}
+
     @push('scripts')
     <script>
         function togglePropertySelect(role) {
             const propertySelectContainer = document.getElementById('property-select-container');
             const propertySelect = document.getElementById('property_id');
             
-            // !! PERBAIKAN DI BARIS INI !!
+            // Daftar peran yang WAJIB memilih properti. 'pengurus' tidak termasuk.
             const rolesRequiringProperty = ['pengguna_properti', 'sales', 'online_ecommerce', 'hk'];
-
+    
             if (rolesRequiringProperty.includes(role)) {
                 propertySelectContainer.style.display = 'block';
                 propertySelect.required = true;
             } else {
                 propertySelectContainer.style.display = 'none';
                 propertySelect.required = false;
-                propertySelect.value = '';
+                propertySelect.value = ''; // Kosongkan pilihan properti
             }
         }
-
+    
+        // Kode ini untuk memastikan tampilan benar saat halaman pertama kali dimuat
         document.addEventListener('DOMContentLoaded', function() {
             const roleSelect = document.getElementById('role');
             if (roleSelect.value) {

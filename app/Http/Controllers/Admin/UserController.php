@@ -20,40 +20,42 @@ class UserController extends Controller
 
     public function create()
     {
-        $properties = Property::orderBy('name')->get();
+        $properties = Property::all();
         $roles = [
             'admin' => 'Admin',
             'owner' => 'Owner',
-            'hk' => 'Housekeeping (HK)',
+            'pengurus' => 'Pengurus',
             'pengguna_properti' => 'Pengguna Properti',
             'sales' => 'Sales',
-            'online_ecommerce' => 'Online Ecommerce',
+            'hk' => 'Housekeeping',
+            'online_ecommerce' => 'E-Commerce',
         ];
         return view('admin.users.create', compact('properties', 'roles'));
     }
 
     public function store(Request $request)
     {
-        $this->authorize('manage-data');
+        $rolesRequiringProperty = ['pengguna_properti', 'sales', 'online_ecommerce', 'hk'];
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'string', Rule::in(['admin', 'owner', 'hk', 'pengguna_properti', 'sales', 'online_ecommerce'])],
-            'property_id' => ['nullable', 'required_if:role,pengguna_properti,sales,online_ecommerce,hk', 'exists:properties,id'],
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8|confirmed',
+            // Perbaikan: Tambahkan 'pengurus' ke daftar peran yang valid
+            'role' => ['required', Rule::in(['admin', 'owner', 'pengurus', 'pengguna_properti', 'sales', 'online_ecommerce', 'hk'])],
+            // Perbaikan: property_id hanya wajib jika rolenya ada di dalam array $rolesRequiringProperty
+            'property_id' => [Rule::requiredIf(in_array($request->input('role'), $rolesRequiringProperty)), 'nullable', 'exists:properties,id'],
         ]);
 
-        $data = $request->only('name', 'email', 'role', 'property_id');
-        $data['password'] = Hash::make($request->password);
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+            'property_id' => in_array($validated['role'], ['admin', 'owner', 'pengurus']) ? null : $validated['property_id'],
+        ]);
 
-        if ($request->role === 'admin' || $request->role === 'owner') {
-            $data['property_id'] = null;
-        }
-
-        User::create($data);
-
-        return redirect()->route('admin.users.index')->with('success', 'Pengguna baru berhasil dibuat.');
+        return redirect()->route('admin.users.index')->with('success', 'Pengguna berhasil dibuat.');
     }
 
     public function show(User $user)
@@ -63,40 +65,43 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        $properties = Property::orderBy('name')->get();
+        $properties = Property::all();
         $roles = [
             'admin' => 'Admin',
             'owner' => 'Owner',
-            'hk' => 'Housekeeping (HK)',
+            'pengurus' => 'Pengurus',
             'pengguna_properti' => 'Pengguna Properti',
             'sales' => 'Sales',
-            'online_ecommerce' => 'Online Ecommerce',
+            'hk' => 'Housekeeping',
+            'online_ecommerce' => 'E-Commerce',
         ];
         return view('admin.users.edit', compact('user', 'properties', 'roles'));
     }
 
     public function update(Request $request, User $user)
     {
-        $this->authorize('manage-data');
+        $rolesRequiringProperty = ['pengguna_properti', 'sales', 'online_ecommerce', 'hk'];
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'string', Rule::in(['admin', 'owner', 'hk', 'pengguna_properti', 'sales', 'online_ecommerce'])],
-            'property_id' => ['nullable', 'required_if:role,pengguna_properti,sales,online_ecommerce,hk', 'exists:properties,id'],
+            'password' => 'nullable|string|min:8|confirmed',
+            // Perbaikan: Tambahkan 'pengurus' ke daftar peran yang valid
+            'role' => ['required', Rule::in(['admin', 'owner', 'pengurus', 'pengguna_properti', 'sales', 'online_ecommerce', 'hk'])],
+            // Perbaikan: property_id hanya wajib jika rolenya ada di dalam array $rolesRequiringProperty
+            'property_id' => [Rule::requiredIf(in_array($request->input('role'), $rolesRequiringProperty)), 'nullable', 'exists:properties,id'],
         ]);
 
-        $data = $request->only('name', 'email', 'role', 'property_id');
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+        $user->name = $validated['name'];
+        $user->email = $validated['email'];
+        $user->role = $validated['role'];
+        $user->property_id = in_array($validated['role'], ['admin', 'owner', 'pengurus']) ? null : $validated['property_id'];
+
+        if (!empty($validated['password'])) {
+            $user->password = Hash::make($validated['password']);
         }
 
-        if ($request->role === 'admin' || $request->role === 'owner') {
-            $data['property_id'] = null;
-        }
-
-        $user->update($data);
+        $user->save();
 
         return redirect()->route('admin.users.index')->with('success', 'Pengguna berhasil diperbarui.');
     }

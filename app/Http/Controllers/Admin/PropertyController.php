@@ -225,6 +225,14 @@ class PropertyController extends Controller
         $validatedData = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('properties')->ignore($property->id)],
             'chart_color' => 'nullable|string|size:7|starts_with:#',
+            'address' => 'nullable|string',
+            // Tambahkan validasi untuk total_rooms dan bar
+            'total_rooms' => 'required|integer|min:0',
+            'bar_1' => 'nullable|integer',
+            'bar_2' => 'nullable|integer',
+            'bar_3' => 'nullable|integer',
+            'bar_4' => 'nullable|integer',
+            'bar_5' => 'nullable|integer',
         ]);
 
         $property->update($validatedData);
@@ -245,136 +253,71 @@ class PropertyController extends Controller
         return redirect()->route('admin.properties.index')
             ->with('success', 'Properti berhasil dihapus.');
     }
-
+    
     public function showComparisonForm()
     {
         $properties = Property::orderBy('name')->get();
-        if ($properties->count() < 2) {
-            return redirect()->route('admin.dashboard')->with('info', 'Minimal perlu ada 2 properti untuk dapat dibandingkan.');
-        }
         return view('admin.properties.compare_form', compact('properties'));
     }
-    
+
     public function showComparisonResults(Request $request)
     {
         $validated = $request->validate([
-            'properties_ids'     => 'required|array|min:2',
-            'properties_ids.*'   => 'integer|exists:properties,id',
-            'start_date'         => 'required|date',
-            'end_date'           => 'required|date|after_or_equal:start_date',
+            'property_ids'   => 'required|array|min:1',
+            'property_ids.*' => 'exists:properties,id',
+            'start_date'     => 'required|date',
+            'end_date'       => 'required|date|after_or_equal:start_date',
         ]);
 
-        $propertyIds = $validated['properties_ids'];
-        $startDate = Carbon::parse($validated['start_date'])->startOfDay();
-        $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+        $propertyIds = $validated['property_ids'];
+        $startDate = $validated['start_date'];
+        $endDate = $validated['end_date'];
 
-        $incomeCategories = [
-            'offline_room_income' => 'Walk In Guest', 'online_room_income'  => 'OTA', 'ta_income'           => 'TA/Travel Agent',
-            'gov_income'          => 'Gov/Government', 'corp_income'       => 'Corp/Corporation', 'compliment_income'   => 'Compliment',
-            'house_use_income'    => 'House Use', 'mice_income'         => 'MICE', 'fnb_income'          => 'F&B',
-            'others_income'       => 'Lainnya',
-        ];
-        $categoryLabels = array_values($incomeCategories);
-        $categoryKeysForDisplay = array_keys($incomeCategories);
+        $properties = Property::whereIn('id', $propertyIds)->get();
 
-        $dbCategoryColumns = [
-            'offline_room_income', 'online_room_income', 'ta_income', 'gov_income', 'corp_income',
-            'compliment_income', 'house_use_income', 'breakfast_income', 'lunch_income', 'dinner_income', 'others_income'
-        ];
-        
-        $comparisonData = [];
-        $totalRevenueRaw = implode(' + ', array_map(fn($col) => "IFNULL(`$col`, 0)", $dbCategoryColumns));
-        $selectedPropertiesModels = Property::whereIn('id', $propertyIds)->get();
+        $results = DailyIncome::whereIn('property_id', $propertyIds)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->groupBy('property_id')
+            ->select(
+                'property_id',
+                DB::raw('SUM(offline_room_income) as offline_revenue, SUM(offline_rooms) as offline_rooms'),
+                DB::raw('SUM(online_room_income) as online_revenue, SUM(online_rooms) as online_rooms'),
+                DB::raw('SUM(ta_income) as ta_revenue, SUM(ta_rooms) as ta_rooms'),
+                DB::raw('SUM(gov_income) as gov_revenue, SUM(gov_rooms) as gov_rooms'),
+                DB::raw('SUM(corp_income) as corp_revenue, SUM(corp_rooms) as corp_rooms'),
+                DB::raw('SUM(afiliasi_room_income) as afiliasi_revenue, SUM(afiliasi_rooms) as afiliasi_rooms'),
+                DB::raw('SUM(total_rooms_revenue) as total_room_revenue, SUM(total_rooms_sold) as total_rooms_sold'),
+                DB::raw('SUM(total_fb_revenue) as total_fb_revenue'),
+                DB::raw('SUM(mice_room_income) as total_mice_revenue'),
+                DB::raw('SUM(others_income) as total_others_revenue'),
+                DB::raw('SUM(total_revenue) as total_overall_revenue'),
+                DB::raw('AVG(occupancy) as average_occupancy'),
+                DB::raw('SUM(total_rooms_revenue) / NULLIF(SUM(total_rooms_sold), 0) as average_arr')
+            )
+            ->get()
+            ->keyBy('property_id');
 
-        foreach ($selectedPropertiesModels as $property) {
-            $incomeDetails = DailyIncome::where('property_id', $property->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->select(DB::raw("SUM({$totalRevenueRaw}) as total_revenue, " . implode(', ', array_map(fn($col) => "SUM(IFNULL(`{$col}`, 0)) as `{$col}`", $dbCategoryColumns))))
-                ->first();
+        // ======================= PERSIAPAN DATA GRAFIK YANG DIPERBAIKI =======================
+        $chartData = $properties->map(function ($property) use ($results) {
+            // Cek apakah ada hasil untuk properti ini
+            $result = $results->get($property->id);
             
-            $miceRevenueFromBooking = Booking::where('property_id', $property->id)
-                ->where('status', 'Booking Pasti')
-                ->whereBetween('event_date', [$startDate, $endDate])
-                ->sum('total_price');
-
-            $dataPoint = ['name' => $property->name];
-            
-            $totalFnb = ($incomeDetails->breakfast_income ?? 0) + ($incomeDetails->lunch_income ?? 0) + ($incomeDetails->dinner_income ?? 0);
-            $dataPoint['offline_room_income'] = $incomeDetails->offline_room_income ?? 0;
-            $dataPoint['online_room_income'] = $incomeDetails->online_room_income ?? 0;
-            $dataPoint['ta_income'] = $incomeDetails->ta_income ?? 0;
-            $dataPoint['gov_income'] = $incomeDetails->gov_income ?? 0;
-            $dataPoint['corp_income'] = $incomeDetails->corp_income ?? 0;
-            $dataPoint['compliment_income'] = $incomeDetails->compliment_income ?? 0;
-            $dataPoint['house_use_income'] = $incomeDetails->house_use_income ?? 0;
-            $dataPoint['fnb_income'] = $totalFnb;
-            $dataPoint['others_income'] = $incomeDetails->others_income ?? 0;
-            
-            $dataPoint['mice_income'] = $miceRevenueFromBooking;
-            
-            $totalFromDailyIncome = $incomeDetails->total_revenue ?? 0;
-            $dataPoint['total_revenue'] = $totalFromDailyIncome + $miceRevenueFromBooking;
-            
-            $comparisonData[] = $dataPoint;
-        }
-
-        $datasetsForGroupedBar = [];
-        $colors = ['rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'];
-        foreach ($selectedPropertiesModels as $index => $property) {
-            $propertyData = collect($comparisonData)->firstWhere('name', $property->name);
-            $dataValues = [];
-            if ($propertyData) {
-                foreach($categoryKeysForDisplay as $column){
-                    $dataValues[] = $propertyData[$column];
-                }
-            }
-            $datasetsForGroupedBar[] = ['label' => $property->name, 'data' => $dataValues, 'backgroundColor' => $property->chart_color ?? $colors[$index % count($colors)]];
-        }
-        $chartDataGroupedBar = ['labels' => $categoryLabels, 'datasets' => $datasetsForGroupedBar];
-
-        $period = CarbonPeriod::create($startDate, '1 day', $endDate);
-        $dateLabels = collect($period)->map(fn($date) => $date->isoFormat('D MMM'));
-        $datasetsForTrend = [];
-        
-        foreach ($selectedPropertiesModels as $index => $property) {
-            $dailyIncomes = DailyIncome::where('property_id', $property->id)
-                ->whereBetween('date', [$startDate, $endDate])
-                ->select('date', DB::raw("SUM({$totalRevenueRaw}) as daily_total_revenue"))
-                ->groupBy('date')->orderBy('date', 'asc')->get()
-                ->keyBy(fn($item) => Carbon::parse($item->date)->isoFormat('D MMM'));
-            
-            $dailyMiceFromBookings = Booking::where('property_id', $property->id)
-                ->where('status', 'Booking Pasti')
-                ->whereBetween('event_date', [$startDate, $endDate])
-                ->select(DB::raw('DATE(event_date) as date'), DB::raw('SUM(total_price) as daily_mice_revenue'))
-                ->groupBy('date')
-                ->get()
-                ->keyBy(fn($item) => Carbon::parse($item->date)->isoFormat('D MMM'));
-            
-            $trendDataPoints = $dateLabels->map(function($label) use ($dailyIncomes, $dailyMiceFromBookings) {
-                $incomeTotal = $dailyIncomes->get($label)->daily_total_revenue ?? 0;
-                $miceTotal = $dailyMiceFromBookings->get($label)->daily_mice_revenue ?? 0;
-                return $incomeTotal + $miceTotal;
-            });
-
-            $datasetsForTrend[] = [
-                'label' => $property->name, 
-                'data' => $trendDataPoints, 
-                'borderColor' => $property->chart_color ?? $colors[$index % count($colors)], 
-                'fill' => false, 
-                'tension' => 0.1
+            return [
+                'label' => $property->name,
+                // Jika tidak ada hasil ($result), anggap pendapatannya 0
+                'revenue' => $result ? $result->total_overall_revenue : 0,
+                'color' => $property->chart_color ?? sprintf('#%06X', mt_rand(0, 0xFFFFFF)),
             ];
-        }
-        $trendChartData = ['labels' => $dateLabels, 'datasets' => $datasetsForTrend];
+        });
+        // =================================================================================
 
-        return view('admin.properties.compare_results', [
-            'selectedPropertiesModels' => $selectedPropertiesModels,
-            'startDateFormatted' => $startDate->isoFormat('D MMMM YYYY'),
-            'endDateFormatted' => $endDate->isoFormat('D MMMM YYYY'),
-            'comparisonData' => $comparisonData,
-            'chartDataGroupedBar' => $chartDataGroupedBar,
-            'trendChartData' => $trendChartData,
-            'incomeCategories' => $incomeCategories,
-        ]);
+        return view('admin.properties.compare_results', compact(
+            'properties', 
+            'results', 
+            'startDate', 
+            'endDate',
+            'chartData'
+        ));
     }
+
 }

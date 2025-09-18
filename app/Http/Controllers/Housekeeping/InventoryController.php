@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Inventory;
 use App\Models\HotelRoom;
 use App\Models\HkAssignment;
+use App\Http\Traits\LogActivity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Traits\LogActivity;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -16,6 +16,7 @@ use Carbon\Carbon;
 class InventoryController extends Controller
 {
     use LogActivity;
+
     public function index()
     {
         $propertyId = Auth::user()->property_id;
@@ -26,13 +27,7 @@ class InventoryController extends Controller
             ->with('roomType')
             ->get();
 
-        $todayAssignmentsCount = HkAssignment::where('user_id', Auth::id())
-            ->whereDate('created_at', Carbon::today())
-            ->count();
-        
-        $canAssign = $todayAssignmentsCount < 2;
-
-        return view('housekeeping.inventory.index', compact('rooms', 'canAssign'));
+        return view('housekeeping.inventory.index', compact('rooms'));
     }
 
     public function selectRoom(Request $request)
@@ -68,8 +63,8 @@ class InventoryController extends Controller
         }
 
         $inventories = Inventory::where('category', 'ROOM AMENITIES')
-                                ->orderBy('name')
-                                ->get();
+                                  ->orderBy('name')
+                                  ->get();
         
         $currentAmenities = $room->amenities()->get()->keyBy('id');
 
@@ -84,6 +79,7 @@ class InventoryController extends Controller
 
         $assignmentsCount = HkAssignment::where('room_id', $room->id)
                                           ->whereDate('created_at', Carbon::today())
+                                          ->where('user_id', Auth::id())
                                           ->count();
         
         if ($assignmentsCount >= 2) {
@@ -95,55 +91,58 @@ class InventoryController extends Controller
             'amenities.*.quantity' => 'required|integer|min:0',
         ]);
 
-        $inputAmenities = $request->input('amenities', []);
-        $currentAmenities = $room->amenities()->get()->keyBy('id');
-        
-        // Cek stok sebelum memulai transaksi
-        foreach ($inputAmenities as $inventoryId => $data) {
-            $quantity = (int) $data['quantity'];
-            $currentQuantity = $currentAmenities->get($inventoryId)->pivot->quantity ?? 0;
-            $quantityDifference = $quantity - $currentQuantity;
-
-            if ($quantityDifference > 0) {
-                $inventoryItem = Inventory::findOrFail($inventoryId);
-                if ($inventoryItem->quantity < $quantityDifference) {
-                    throw ValidationException::withMessages([
-                        'amenities.' . $inventoryId . '.quantity' => "Stok untuk {$inventoryItem->name} tidak mencukupi. Sisa stok: {$inventoryItem->quantity}",
-                    ]);
-                }
-            }
-        }
-
         try {
-            DB::transaction(function () use ($inputAmenities, $room, $currentAmenities) {
+            DB::transaction(function () use ($request, $room) {
                 $amenitiesToSync = [];
+                $inputAmenities = $request->input('amenities', []);
+                $currentAmenities = $room->amenities()->get()->keyBy('id');
+
                 foreach ($inputAmenities as $inventoryId => $data) {
                     $quantity = (int) $data['quantity'];
                     $currentQuantity = $currentAmenities->get($inventoryId)->pivot->quantity ?? 0;
                     $quantityDifference = $quantity - $currentQuantity;
                     
-                    if ($quantityDifference > 0) {
-                        // Kurangi stok karena sudah divalidasi di atas
+                    if ($quantityDifference !== 0) { // Hanya proses jika ada perubahan
                         $inventoryItem = Inventory::findOrFail($inventoryId);
-                        $inventoryItem->decrement('quantity', $quantityDifference);
-                    } elseif ($quantityDifference < 0) {
-                        // Jika jumlah berkurang, kembalikan stok
-                        $inventoryItem = Inventory::findOrFail($inventoryId);
-                        $inventoryItem->increment('quantity', abs($quantityDifference));
+
+                        // Kurangi stok jika ada penambahan amenities di kamar
+                        if ($quantityDifference > 0) {
+                            if ($inventoryItem->quantity < $quantityDifference) {
+                                throw ValidationException::withMessages([
+                                    'amenities.' . $inventoryId . '.quantity' => "Stok untuk {$inventoryItem->name} tidak mencukupi. Sisa: {$inventoryItem->quantity}",
+                                ]);
+                            }
+                            $inventoryItem->decrement('quantity', $quantityDifference);
+                        } 
+                        // Tambah stok jika ada pengurangan amenities di kamar
+                        elseif ($quantityDifference < 0) {
+                            $inventoryItem->increment('quantity', abs($quantityDifference));
+                        }
+
+                        // Catat setiap item yang digunakan ke dalam HkAssignment
+                        HkAssignment::create([
+                            'user_id' => Auth::id(),
+                            'room_id' => $room->id,
+                            'property_id' => $room->property_id,
+                            'inventory_id' => $inventoryId,
+                            'quantity_used' => $quantityDifference, // Catat selisih penggunaan
+                        ]);
                     }
                     
                     if ($quantity > 0) {
                         $amenitiesToSync[$inventoryId] = ['quantity' => $quantity];
                     }
                 }
+
+                // Update status amenities terkini di kamar
                 $room->amenities()->sync($amenitiesToSync);
 
-                HkAssignment::create([
-                    'user_id' => Auth::id(),
-                    'room_id' => $room->id,
-                    'property_id' => $room->property_id,
-                ]);
-                $this->logActivity('Memperbarui amenities untuk kamar ' . $room->room_number, $request);
+                // Catat aktivitas ke log utama
+                $this->logActivity(
+                    'Memperbarui amenities untuk kamar ' . $room->room_number,
+                    $request,
+                    $room->property_id 
+                );
             });
         } catch (\Exception $e) {
             return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());

@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\User; // <-- TAMBAHKAN INI
-use Illuminate\Support\Facades\Gate; // <-- TAMBAHKAN INI
+use App\Models\User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -14,7 +14,7 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
-        //
+        'App\Models\DailyIncome' => 'App\Policies\DailyIncomePolicy', // Pastikan policy ini ada jika digunakan
     ];
 
     /**
@@ -22,18 +22,15 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // ======================= AWAL BLOK YANG DIUBAH =======================
-        
-        // Gate ini akan digunakan untuk semua aksi Create, Update, Delete (CUD)
-        // Hanya user dengan peran 'admin' yang akan diizinkan.
+        $this->registerPolicies();
+
+        /**
+         * Gate ini hanya akan memberikan izin 'true' jika peran pengguna
+         * adalah 'admin' atau 'owner'. Peran 'pengurus' dan lainnya
+         * akan mendapatkan 'false', sehingga hanya bisa melihat.
+         */
         Gate::define('manage-data', function (User $user) {
-            return $user->role === 'admin';
+            return in_array($user->role, ['admin', 'owner']);
         });
-
-        // Anda bisa juga membuat Gate yang lebih spesifik jika diperlukan
-        // Gate::define('manage-users', fn(User $user) => $user->role === 'admin');
-        // Gate::define('manage-properties', fn(User $user) => $user->role === 'admin');
-
-        // ======================= AKHIR BLOK YANG DIUBAH ======================
     }
 }

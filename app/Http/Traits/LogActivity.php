@@ -2,7 +2,7 @@
 
 namespace App\Http\Traits;
 
-use App\Models\ActivityLog; // Pastikan Anda punya model ini
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,18 +13,17 @@ trait LogActivity
      *
      * @param string $description Deskripsi dari aktivitas yang dilakukan.
      * @param Request $request Object request untuk mendapatkan IP & User Agent.
+     * @param int|null $propertyId ID dari properti yang terkait dengan aktivitas.
      */
-    public function logActivity(string $description, Request $request)
+    public function logActivity(string $description, Request $request, $propertyId = null)
     {
         if (!Auth::check()) {
             return; // Jangan catat jika tidak ada user yang login
         }
 
-        $user = Auth::user();
-
         ActivityLog::create([
-            'user_id'       => $user->id,
-            'property_id'   => $user->property_id, // Catat properti terkait user
+            'user_id'       => Auth::id(),
+            'property_id'   => $propertyId, // <-- DIUBAH: Mengambil dari parameter
             'description'   => $description,
             'ip_address'    => $request->ip(),
             'user_agent'    => $request->userAgent(),

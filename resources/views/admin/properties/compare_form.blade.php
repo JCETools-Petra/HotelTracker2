@@ -1,15 +1,8 @@
-<x-app-layout>
+<x-admin-layout>
     <x-slot name="header">
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
-                {{ __('Bandingkan Kinerja Properti') }}
-            </h2>
-            <nav>
-                <x-nav-link :href="route('admin.dashboard')" class="ml-3">
-                    {{ __('Kembali ke Dashboard Admin') }}
-                </x-nav-link>
-            </nav>
-        </div>
+        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+            {{ __('Bandingkan Kinerja Properti') }}
+        </h2>
     </x-slot>
 
     <div class="py-12">
@@ -19,13 +12,11 @@
                     <h3 class="text-lg font-semibold mb-6">Pilih Properti dan Rentang Tanggal</h3>
 
                     <form method="GET" action="{{ route('admin.properties.compare.results') }}">
-                        @csrf {{-- Tidak diperlukan untuk GET, tapi tidak masalah jika ada --}}
-
+                        
                         {{-- Pemilihan Properti --}}
                         <div class="mb-6">
-                            <label class="block font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">Pilih Properti (Minimal 2):</label>
+                            <label class="block font-medium text-sm text-gray-700 dark:text-gray-300 mb-2">Pilih Properti (Minimal 1):</label>
                             
-                            {{-- [FIX] Menambahkan checkbox "Pilih Semua" --}}
                             <div class="mt-2 mb-4">
                                 <label for="select-all-properties" class="flex items-center space-x-2 cursor-pointer">
                                     <input type="checkbox" id="select-all-properties" class="rounded dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:focus:ring-offset-gray-800">
@@ -36,17 +27,19 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto p-2 border dark:border-gray-700 rounded-md">
                                 @forelse ($properties as $property)
                                     <label for="property_{{ $property->id }}" class="flex items-center space-x-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md cursor-pointer">
-                                        {{-- [FIX] Menambahkan kelas 'property-checkbox' untuk target JavaScript --}}
-                                        <input type="checkbox" id="property_{{ $property->id }}" name="properties_ids[]" value="{{ $property->id }}"
+                                        {{-- ======================= PERBAIKAN 1 DI SINI ======================= --}}
+                                        <input type="checkbox" id="property_{{ $property->id }}" name="property_ids[]" value="{{ $property->id }}"
                                                class="property-checkbox rounded dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:focus:ring-offset-gray-800"
-                                               {{ (is_array(old('properties_ids')) && in_array($property->id, old('properties_ids'))) ? 'checked' : '' }}>
+                                               {{ (is_array(old('property_ids')) && in_array($property->id, old('property_ids'))) ? 'checked' : '' }}>
                                         <span class="text-sm text-gray-700 dark:text-gray-300">{{ $property->name }}</span>
                                     </label>
                                 @empty
                                     <p class="text-sm text-gray-500 dark:text-gray-400 col-span-full">Tidak ada properti tersedia.</p>
                                 @endforelse
                             </div>
-                            @error('properties_ids')
+                            
+                            {{-- ======================= PERBAIKAN 2 DI SINI ======================= --}}
+                            @error('property_ids')
                                 <p class="text-sm text-red-600 dark:text-red-400 mt-2">{{ $message }}</p>
                             @enderror
                         </div>
@@ -54,29 +47,26 @@
                         {{-- Pemilihan Rentang Tanggal --}}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                             <div>
-                                <x-input-label for="start_date" :value="__('Dari Tanggal')" />
-                                <x-text-input id="start_date" class="block mt-1 w-full" type="date" name="start_date" :value="old('start_date', \Carbon\Carbon::now()->startOfMonth()->toDateString())" required />
+                                <label for="start_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Dari Tanggal') }}</label>
+                                <input id="start_date" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-900 dark:border-gray-700" type="date" name="start_date" value="{{ old('start_date', \Carbon\Carbon::now()->startOfMonth()->toDateString()) }}" required />
                                 @error('start_date')
                                     <p class="text-sm text-red-600 dark:text-red-400 mt-2">{{ $message }}</p>
                                 @enderror
                             </div>
                             <div>
-                                <x-input-label for="end_date" :value="__('Sampai Tanggal')" />
-                                <x-text-input id="end_date" class="block mt-1 w-full" type="date" name="end_date" :value="old('end_date', \Carbon\Carbon::now()->endOfMonth()->toDateString())" required />
+                                <label for="end_date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Sampai Tanggal') }}</label>
+                                <input id="end_date" class="block mt-1 w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-900 dark:border-gray-700" type="date" name="end_date" value="{{ old('end_date', \Carbon\Carbon::now()->endOfMonth()->toDateString()) }}" required />
                                 @error('end_date')
                                     <p class="text-sm text-red-600 dark:text-red-400 mt-2">{{ $message }}</p>
                                 @enderror
                             </div>
                         </div>
-                        @error('date_range')
-                            <p class="text-sm text-red-600 dark:text-red-400 mb-4">{{ $message }}</p>
-                        @enderror
 
                         {{-- Tombol Submit --}}
                         <div class="flex items-center justify-end mt-6">
-                            <x-primary-button type="submit">
+                            <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">
                                 {{ __('Tampilkan Perbandingan') }}
-                            </x-primary-button>
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -84,7 +74,7 @@
         </div>
     </div>
 
-    {{-- [FIX] Menambahkan skrip untuk fungsionalitas "Pilih Semua" --}}
+    {{-- Skrip untuk fungsionalitas "Pilih Semua" --}}
     @push('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -110,4 +100,4 @@
         });
     </script>
     @endpush
-</x-app-layout>
+</x-admin-layout>

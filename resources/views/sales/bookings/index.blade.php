@@ -15,12 +15,31 @@
 
             <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-6">
                 <form action="{{ route('sales.bookings.index') }}" method="GET">
-                    <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {{-- Grid diubah untuk mengakomodasi filter baru --}}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
                         
                         <div class="lg:col-span-2">
                             <label for="search" class="sr-only">Cari</label>
                             <input type="text" name="search" id="search" placeholder="Cari nama klien atau no. booking..." value="{{ request('search') }}" class="w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm text-sm">
                         </div>
+
+                        {{-- =============================================== --}}
+                        {{-- FILTER PROPERTI KHUSUS ADMIN/OWNER --}}
+                        {{-- =============================================== --}}
+                        @if(in_array(auth()->user()->role, ['admin', 'owner']))
+                        <div>
+                            <label for="property_id" class="sr-only">Properti</label>
+                            <select name="property_id" id="property_id" class="w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">Semua Properti</option>
+                                @foreach ($properties as $property)
+                                    <option value="{{ $property->id }}" @selected(request('property_id') == $property->id)>
+                                        {{ $property->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @endif
+                        {{-- =============================================== --}}
 
                         <div>
                             <label for="status" class="sr-only">Status</label>
@@ -42,7 +61,7 @@
                              <input type="date" name="end_date" id="end_date" value="{{ request('end_date') }}" class="w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm text-sm" title="Tanggal Acara Selesai">
                         </div>
 
-                        <div class="flex items-end space-x-2">
+                        <div class="flex items-end space-x-2 lg:col-span-1">
                             <button type="submit" class="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">Filter</button>
                             <a href="{{ route('sales.bookings.index') }}" class="w-full text-center px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-400 text-sm">Reset</a>
                         </div>
@@ -89,7 +108,6 @@
                                             {{ $booking->status }}
                                         </span>
                                     </td>
-                                    {{-- ======================= AWAL BLOK YANG DIUBAH ======================= --}}
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <div class="flex items-center space-x-2">
                                             
@@ -114,7 +132,6 @@
 
                                         </div>
                                     </td>
-                                    {{-- ======================= AKHIR BLOK YANG DIUBAH ====================== --}}
                                 </tr>
                             @empty
                                 <tr>
@@ -128,7 +145,8 @@
                 </div>
             </div>
             <div class="mt-4">
-                {{ $bookings->links() }}
+                {{-- Pagination yang sudah diperbaiki untuk menjaga semua filter --}}
+                {{ $bookings->appends(request()->query())->links() }}
             </div>
         </div>
     </div>

@@ -16,18 +16,17 @@ class ActivityLog extends Model
      *
      * @var array<int, string>
      */
-    // ======================= PASTIKAN BLOK INI LENGKAP =======================
     protected $fillable = [
         'user_id',
+        'property_id', // <-- SUDAH ADA, BAGUS!
         'action',
         'description',
         'loggable_id',
         'loggable_type',
         'changes',
-        'ip_address', // Pastikan ini ada
-        'user_agent'  // Pastikan ini ada
+        'ip_address',
+        'user_agent'
     ];
-    // =========================================================================
 
     /**
      * The attributes that should be cast.
@@ -41,6 +40,15 @@ class ActivityLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * TAMBAHKAN FUNGSI INI
+     * Mendefinisikan relasi ke model Property.
+     */
+    public function property(): BelongsTo
+    {
+        return $this->belongsTo(Property::class);
     }
 
     public function loggable(): MorphTo

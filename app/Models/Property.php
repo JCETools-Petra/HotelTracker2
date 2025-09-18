@@ -15,6 +15,7 @@ class Property extends Model
         'name',
         'chart_color',
         'address',
+        'total_rooms', // <-- TAMBAHKAN INI
         'bar_1',
         'bar_2',
         'bar_3',
@@ -63,4 +64,14 @@ class Property extends Model
     {
         return $this->hasMany(RoomType::class);
     }
+
+    /**
+     * ======================= INI YANG PERLU DITAMBAHKAN =======================
+     * Mendefinisikan bahwa satu Property memiliki banyak Inventory.
+     */
+    public function inventories(): HasMany
+    {
+        return $this->hasMany(Inventory::class);
+    }
+    // =========================================================================
 }
