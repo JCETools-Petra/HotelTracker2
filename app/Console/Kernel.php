@@ -13,7 +13,8 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        Commands\RecalculateIncomes::class, // <-- TAMBAHKAN BARIS INI
+        Commands\RecalculateIncomes::class,
+        Commands\CheckoutPropertyReservations::class,
     ];
 
     /**
@@ -22,6 +23,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         // $schedule->command('inspire')->hourly();
+        $schedule->command('reservations:checkout-property')->dailyAt('11:00');
     }
 
     /**

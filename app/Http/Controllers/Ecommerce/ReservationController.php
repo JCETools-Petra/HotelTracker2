@@ -172,7 +172,8 @@ class ReservationController extends Controller
      */
     private function updateDailyOccupancies(Reservation $reservation, string $action)
     {
-        $period = CarbonPeriod::create($reservation->checkin_date, $reservation->checkout_date->subDay());
+        // Ubah periode agar mencakup tanggal checkout
+        $period = CarbonPeriod::create($reservation->checkin_date, $reservation->checkout_date);
         $rooms = $reservation->number_of_rooms;
 
         foreach ($period as $date) {
@@ -189,10 +190,18 @@ class ReservationController extends Controller
             );
 
             if ($action === 'increment') {
-                $dailyOccupancy->increment('reservasi_ota', $rooms);
+                if ($reservation->source === 'properti') {
+                    $dailyOccupancy->increment('reservasi_properti', $rooms);
+                } else {
+                    $dailyOccupancy->increment('reservasi_ota', $rooms);
+                }
                 $dailyOccupancy->increment('occupied_rooms', $rooms);
             } else { // decrement
-                $dailyOccupancy->decrement('reservasi_ota', $rooms);
+                if ($reservation->source === 'properti') {
+                    $dailyOccupancy->decrement('reservasi_properti', $rooms);
+                } else {
+                    $dailyOccupancy->decrement('reservasi_ota', $rooms);
+                }
                 $dailyOccupancy->decrement('occupied_rooms', $rooms);
             }
         }
