@@ -10,10 +10,18 @@
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
                     <h3 class="text-lg font-medium mb-6">Silakan pilih properti yang inventarisnya ingin Anda lihat atau kelola.</h3>
+                    
+                    {{-- Tampilkan pesan error jika ada --}}
+                    @if(session('error'))
+                        <div class="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded" role="alert">
+                            {{ session('error') }}
+                        </div>
+                    @endif
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         @forelse ($properties as $property)
-                            <a href="{{ route('admin.inventories.index', $property) }}" class="block p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow hover:bg-gray-100 dark:hover:bg-gray-600 transition">
+                            {{-- INI BAGIAN YANG DIPERBAIKI --}}
+                            <a href="{{ route('admin.inventories.index', ['property_id' => $property->id]) }}" class="block p-6 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow hover:bg-gray-100 dark:hover:bg-gray-600 transition">
                                 <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{{ $property->name }}</h5>
                                 <p class="font-normal text-gray-700 dark:text-gray-400">{{ $property->address ?? 'Alamat tidak tersedia' }}</p>
                             </a>

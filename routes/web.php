@@ -101,11 +101,17 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
     Route::delete('/users/{user}/force-delete', [AdminUserController::class, 'forceDelete'])->name('users.force-delete');
     
     Route::resource('properties', AdminPropertyController::class)->except(['show']);
-    Route::resource('revenue-targets', RevenueTargetController::class);
-    Route::resource('targets', TargetController::class);
-    Route::resource('mice-categories', MiceCategoryController::class);
-    Route::resource('price-packages', PricePackageController::class);
+    Route::resource('categories', App\Http\Controllers\Admin\CategoryController::class);
     
+    // --- PENYESUAIAN RUTE INVENTARIS ---
+    // 1. Rute custom 'select' harus diletakkan SEBELUM 'resource'
+    Route::get('inventories/select', [AdminInventoryController::class, 'select'])->name('inventories.select');
+    
+    // 2. Gunakan Route::resource untuk menangani rute inventaris standar
+    Route::resource('inventories', AdminInventoryController::class);
+    
+    // 3. Rute manual di bawah ini dinonaktifkan karena sudah ditangani oleh Route::resource dan menyebabkan konflik.
+    /*
     Route::get('/inventories/select', [AdminInventoryController::class, 'showPropertySelection'])->name('inventories.select');
     Route::get('/properties/{property}/inventories', [AdminInventoryController::class, 'index'])->name('inventories.index');
     Route::get('/properties/{property}/inventories/create', [AdminInventoryController::class, 'create'])->name('inventories.create');
@@ -113,7 +119,14 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
     Route::get('/inventories/{inventory}/edit', [AdminInventoryController::class, 'edit'])->name('inventories.edit');
     Route::put('/inventories/{inventory}', [AdminInventoryController::class, 'update'])->name('inventories.update');
     Route::delete('/inventories/{inventory}', [AdminInventoryController::class, 'destroy'])->name('inventories.destroy');
-
+    */
+    // --- AKHIR PENYESUAIAN ---
+    
+    Route::resource('revenue-targets', RevenueTargetController::class);
+    Route::resource('targets', TargetController::class);
+    Route::resource('mice-categories', MiceCategoryController::class);
+    Route::resource('price-packages', PricePackageController::class);
+    
     Route::get('/reports/amenities', [AdminInventoryController::class, 'report'])->name('reports.amenities');
     Route::get('/activity-log', [ActivityLogController::class, 'index'])->name('activity_log.index');
     

@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo; // Jangan lupa import ini
 
 class Inventory extends Model
 {
@@ -13,25 +12,45 @@ class Inventory extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var array<int, string>
      */
+    // app/Models/Inventory.php
+
     protected $fillable = [
-        'property_id', // Pastikan ini ada di $fillable
+        'item_code',
+        'property_id',
         'name',
-        'category',
+        'specification',
+        'category_id',
+        'stock',
+        'minimum_standard_quantity', // <-- TAMBAHKAN INI
         'unit',
-        'price',
-        'description',
-        'quantity',
+        'unit_price',
+        'condition',
+        'purchase_date',             // <-- TAMBAHKAN INI
     ];
 
     /**
-     * ======================= TAMBAHKAN FUNGSI DI BAWAH INI =======================
-     * Mendefinisikan bahwa satu Inventory dimiliki oleh (belongs to) satu Property.
+     * Mendapatkan kategori dari inventaris.
      */
-    public function property(): BelongsTo
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Mendapatkan transaksi dari inventaris.
+     */
+    public function transactions()
+    {
+        return $this->hasMany(InventoryTransaction::class);
+    }
+    
+    /**
+     * Mendapatkan properti dari inventaris.
+     */
+    public function property()
     {
         return $this->belongsTo(Property::class);
     }
-    // =========================================================================
 }

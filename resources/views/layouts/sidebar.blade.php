@@ -8,7 +8,7 @@
     <nav class="flex-grow p-4 space-y-2">
         @auth
             {{-- =================================== --}}
-            {{--    MENU UNTUK ADMIN & OWNER (AKSES PENUH) --}}
+            {{--   MENU UNTUK ADMIN & OWNER (AKSES PENUH) --}}
             {{-- =================================== --}}
             @if(in_array(Auth::user()->role, ['admin', 'owner']))
                 <x-side-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
@@ -35,17 +35,23 @@
                     <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg></x-slot>
                     {{ __('Bandingkan Properti') }}
                 </x-side-nav-link>
-
-                <x-side-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
-                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.995 5.995 0 0112 12.75a5.995 5.995 0 01-3 5.197m0 0A7.963 7.963 0 0012 21a7.963 7.963 0 003-5.197M15 21a6 6 0 00-9-5.197"></path></svg></x-slot>
-                    {{ __('Manajemen Pengguna') }}
-                </x-side-nav-link>
-
-                <x-side-nav-link :href="route('admin.properties.index')" :active="request()->routeIs('admin.properties.*') && !request()->routeIs('admin.properties.compare.*')">
-                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg></x-slot>
-                    {{ __('Manajemen Properti') }}
+                
+                {{-- Bagian Inventaris --}}
+                <p class="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase">Inventaris</p>
+                
+                <x-side-nav-link :href="route('admin.inventories.select')" :active="request()->routeIs('admin.inventories.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m0 10l8 4m-8-14v10l8 4"></path></svg></x-slot>
+                    {{ __('Master Inventaris') }}
                 </x-side-nav-link>
                 
+                <x-side-nav-link :href="route('admin.categories.index')" :active="request()->routeIs('admin.categories.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></x-slot>
+                    {{ __('Kategori Inventaris') }}
+                </x-side-nav-link>
+
+                {{-- Bagian MICE --}}
+                <p class="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase">MICE</p>
+
                 <x-side-nav-link :href="route('sales.bookings.index')" :active="request()->routeIs('sales.bookings.*')">
                     <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></x-slot>
                     {{ __('Master Mice') }}
@@ -61,25 +67,32 @@
                     {{ __('Manajemen Harga') }}
                 </x-side-nav-link>
 
-                <x-side-nav-link :href="route('admin.activity_log.index')" :active="request()->routeIs('admin.activity_log.index')">
-                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg></x-slot>
-                    {{ __('Log Aktivitas') }}
-                </x-side-nav-link>
-
                 <x-side-nav-link :href="route('admin.calendar.unified')" :active="request()->routeIs('admin.calendar.unified')">
                     <x-slot name="icon"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></x-slot>
                     {{ __('Kalender Terpusat') }}
                 </x-side-nav-link>
 
-                {{-- DIKEMBALIKAN KE SEMULA UNTUK MENGATASI ERROR 500 --}}
-                <x-side-nav-link :href="route('admin.inventories.select')" :active="request()->routeIs('admin.inventories.*')">
-                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m0 10l8 4m-8-14v10l8 4"></path></svg></x-slot>
-                    {{ __('Inventaris') }}
+                {{-- Bagian Administrasi --}}
+                <p class="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase">Administrasi</p>
+
+                <x-side-nav-link :href="route('admin.users.index')" :active="request()->routeIs('admin.users.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.995 5.995 0 0112 12.75a5.995 5.995 0 01-3 5.197m0 0A7.963 7.963 0 0012 21a7.963 7.963 0 003-5.197M15 21a6 6 0 00-9-5.197"></path></svg></x-slot>
+                    {{ __('Manajemen Pengguna') }}
+                </x-side-nav-link>
+
+                <x-side-nav-link :href="route('admin.properties.index')" :active="request()->routeIs('admin.properties.*') && !request()->routeIs('admin.properties.compare.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg></x-slot>
+                    {{ __('Manajemen Properti') }}
                 </x-side-nav-link>
 
                 <x-side-nav-link :href="route('admin.reports.amenities')" :active="request()->routeIs('admin.reports.amenities')">
                     <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></x-slot>
                     {{ __('Laporan Amenities') }}
+                </x-side-nav-link>
+                
+                <x-side-nav-link :href="route('admin.activity_log.index')" :active="request()->routeIs('admin.activity_log.index')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg></x-slot>
+                    {{ __('Log Aktivitas') }}
                 </x-side-nav-link>
 
                 <x-side-nav-link :href="route('admin.settings.index')" :active="request()->routeIs('admin.settings.*')">
@@ -88,7 +101,7 @@
                 </x-side-nav-link>
 
             {{-- =================================== --}}
-            {{--    MENU UNTUK PENGURUS (AKSES LIHAT) --}}
+            {{--   MENU UNTUK PENGURUS (AKSES LIHAT) --}}
             {{-- =================================== --}}
             @elseif(Auth::user()->role === 'pengurus')
                 <x-side-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
@@ -112,7 +125,7 @@
                 </x-side-nav-link>
 
             {{-- ============================ --}}
-            {{--    MENU UNTUK HOUSEKEEPING     --}}
+            {{--   MENU UNTUK HOUSEKEEPING    --}}
             {{-- ============================ --}}
             @elseif(Auth::user()->role === 'hk')
                 <x-side-nav-link :href="route('housekeeping.inventory.index')" :active="request()->routeIs('housekeeping.inventory.*')">
@@ -125,7 +138,7 @@
                 </x-side-nav-link>
 
             {{-- ================== --}}
-            {{--    MENU UNTUK SALES    --}}
+            {{--   MENU UNTUK SALES   --}}
             {{-- ================== --}}
             @elseif(Auth::user()->role === 'sales')
                 <x-side-nav-link :href="route('sales.dashboard')" :active="request()->routeIs('sales.dashboard')">
@@ -142,7 +155,7 @@
                 </x-side-nav-link>
 
             {{-- ============================ --}}
-            {{--    MENU UNTUK PENGGUNA PROPERTI --}}
+            {{--   MENU UNTUK PENGGUNA PROPERTI --}}
             {{-- ============================ --}}
             @elseif(Auth::user()->role === 'pengguna_properti')
                 <x-side-nav-link :href="route('property.dashboard')" :active="request()->routeIs('property.dashboard')">
@@ -163,7 +176,7 @@
                 </x-side-nav-link>
 
             {{-- ============================ --}}
-            {{--    MENU UNTUK E-COMMERCE       --}}
+            {{--   MENU UNTUK E-COMMERCE       --}}
             {{-- ============================ --}}
             @elseif(Auth::user()->role === 'online_ecommerce')
                 <x-side-nav-link :href="route('ecommerce.dashboard')" :active="request()->routeIs('ecommerce.dashboard')">

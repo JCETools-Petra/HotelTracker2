@@ -5,126 +5,115 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Inventory;
 use App\Models\Property;
-use App\Models\HkAssignment; // 1. Tambahkan ini
+use App\Models\Category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB; // 2. Tambahkan ini
-use App\Http\Traits\LogActivity; // 1. PANGGIL TRAIT
 
 class InventoryController extends Controller
 {
-    use LogActivity; // 2. GUNAKAN TRAIT
-
-    public function index(Property $property)
+    public function select()
     {
-        $inventories = $property->inventories()->paginate(10);
-        return view('admin.inventories.index', compact('property', 'inventories'));
-    }
-    
-    public function showPropertySelection()
-    {
-        $properties = Property::orderBy('name')->get();
+        $properties = Property::all();
         return view('admin.inventories.select_property', compact('properties'));
     }
 
-    public function create(Property $property)
+    public function index(Request $request)
     {
-        return view('admin.inventories.create', compact('property'));
+        $property_id = $request->query('property_id');
+        if (!$property_id) {
+            return redirect()->route('admin.inventories.select')->with('error', 'Silakan pilih properti terlebih dahulu.');
+        }
+
+        $property = Property::findOrFail($property_id);
+        $inventories = Inventory::where('property_id', $property_id)->with('category')->latest()->paginate(10);
+        
+        // --- PERBAIKAN DI SINI ---
+        // Menambahkan kembali logika untuk mengambil semua kategori untuk legenda
+        $allCategories = Category::all();
+        
+        return view('admin.inventories.index', compact('inventories', 'property', 'allCategories'));
     }
 
-    public function store(Request $request, Property $property)
+    public function create(Request $request)
     {
-        $validated = $request->validate([
+        $property_id = $request->query('property_id');
+        if (!$property_id) {
+            return redirect()->route('admin.inventories.select')->with('error', 'Properti tidak valid.');
+        }
+        
+        $property = Property::findOrFail($property_id);
+        $inventoryCategories = Category::all(); 
+        
+        return view('admin.inventories.create', compact('inventoryCategories', 'property'));
+    }
+
+    public function store(Request $request)
+    {
+        // ... (Fungsi store Anda sudah benar)
+        $request->validate([
             'name' => 'required|string|max:255',
-            'quantity' => 'required|integer|min:0',
-            'category' => 'required|string|max:255',
-            'price' => 'nullable|numeric|min:0',
-            'unit' => 'nullable|string|max:50',
+            'specification' => 'nullable|string',
+            'category_id' => 'required|exists:categories,id',
+            'stock' => 'required|integer|min:0',
+            'unit' => 'required|string|max:255',
+            'condition' => 'required|in:baik,rusak',
+            'property_id' => 'required|exists:properties,id',
+            'unit_price' => 'required|numeric|min:0',
+            'minimum_standard_quantity' => 'required|integer|min:0', // <-- TAMBAHKAN INI
+            'purchase_date' => 'required|date', 
         ]);
 
-        $inventory = $property->inventories()->create($validated);
+        $category = Category::find($request->input('category_id'));
+        if (!$category) {
+            return back()->withInput()->with('error', 'Kategori yang dipilih tidak valid.');
+        }
+        
+        $itemCode = $category->category_code . '-' . strtoupper(uniqid());
 
-        // 3. TAMBAHKAN LOGGING
-        $this->logActivity(
-            "Membuat inventaris baru: {$inventory->name}",
-            $request,
-            $property->id
-        );
+        $data = $request->all();
+        $data['item_code'] = $itemCode;
 
-        return redirect()->route('admin.inventories.index', $property)->with('success', 'Inventory created successfully.');
+        Inventory::create($data);
+
+        return redirect()->route('admin.inventories.index', ['property_id' => $request->property_id])->with('success', 'Item inventaris berhasil dibuat.');
+    }
+
+    public function show(Inventory $inventory)
+    {
+        return redirect()->route('admin.inventories.edit', $inventory);
     }
 
     public function edit(Inventory $inventory)
     {
-        $inventory->load('property');
-        return view('admin.inventories.edit', compact('inventory'));
+        $inventoryCategories = Category::all(); 
+        $property = $inventory->property;
+        return view('admin.inventories.edit', compact('inventory', 'inventoryCategories', 'property'));
     }
 
     public function update(Request $request, Inventory $inventory)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'quantity' => 'required|integer|min:0',
-            'category' => 'required|string|max:255',
-            'price' => 'nullable|numeric|min:0',
-            'unit' => 'nullable|string|max:50',
-        ]);
-
-        $inventory->update($validated);
-
-        // 3. TAMBAHKAN LOGGING
-        $this->logActivity(
-            "Memperbarui inventaris: {$inventory->name}",
-            $request,
-            $inventory->property_id
-        );
-
-        return redirect()->route('admin.inventories.index', $inventory->property_id)->with('success', 'Inventory updated successfully.');
-    }
-
-    public function destroy(Request $request, Inventory $inventory)
-    {
-        $propertyId = $inventory->property_id;
-        $inventoryName = $inventory->name;
-
-        $inventory->delete();
-
-        $this->logActivity(
-            "Menghapus inventaris: {$inventoryName}",
-            $request,
-            $propertyId
-        );
-
-        return redirect()->route('admin.inventories.index', $propertyId)->with('success', 'Inventory deleted successfully.');
-    }
-    
-    public function report(Request $request)
-    {
+        // ... (Fungsi update Anda sudah benar)
         $request->validate([
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'name' => 'required|string|max:255',
+            'specification' => 'nullable|string',
+            'category_id' => 'required|exists:categories,id',
+            'stock' => 'required|integer|min:0',
+            'unit' => 'required|string|max:255',
+            'condition' => 'required|in:baik,rusak',
+            'property_id' => 'required|exists:properties,id',
+            'unit_price' => 'required|numeric|min:0',
+            'minimum_standard_quantity' => 'required|integer|min:0', // <-- TAMBAHKAN INI
+            'purchase_date' => 'required|date', 
         ]);
 
-        // Query untuk mengambil data penggunaan amenities dari tabel HkAssignment
-        $reportData = HkAssignment::join('inventories', 'hk_assignments.inventory_id', '=', 'inventories.id')
-            ->join('hotel_rooms', 'hk_assignments.room_id', '=', 'hotel_rooms.id')
-            ->join('properties', 'hotel_rooms.property_id', '=', 'properties.id')
-            ->where('inventories.category', 'ROOM AMENITIES')
-            ->when($request->filled('start_date'), function ($query) use ($request) {
-                return $query->whereDate('hk_assignments.created_at', '>=', $request->start_date);
-            })
-            ->when($request->filled('end_date'), function ($query) use ($request) {
-                return $query->whereDate('hk_assignments.created_at', '<=', $request->end_date);
-            })
-            ->select(
-                'properties.name as property_name',
-                'inventories.name as amenity_name',
-                DB::raw('SUM(hk_assignments.quantity_used) as total_used')
-            )
-            ->groupBy('properties.name', 'inventories.name')
-            ->orderBy('properties.name')
-            ->orderBy('total_used', 'desc')
-            ->get();
+        $inventory->update($request->except('item_code'));
 
-        return view('admin.reports.amenity_usage', compact('reportData'));
+        return redirect()->route('admin.inventories.index', ['property_id' => $inventory->property_id])->with('success', 'Item inventaris berhasil diperbarui.');
+    }
+
+    public function destroy(Inventory $inventory)
+    {
+        // ... (Fungsi destroy Anda sudah benar)
+        $inventory->delete();
+        return back()->with('success', 'Item inventaris berhasil dihapus.');
     }
 }

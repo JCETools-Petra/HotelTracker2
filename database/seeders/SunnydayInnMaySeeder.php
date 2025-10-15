@@ -1,0 +1,233 @@
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
+class SunnydayInnMaySeeder extends Seeder
+{
+    private function distribute(int $total, int $days, float $fluct = 0.5): array
+    {
+        if ($days <= 1) return [$total];
+        $base = $total / $days;
+        $out = []; $run = 0;
+
+        for ($i = 0; $i < $days - 1; $i++) {
+            $rand = (mt_rand(-1000, 1000) / 1000.0); // -1..1
+            $val  = (int) round($base * (1 + $fluct * $rand));
+            $val  = max(0, $val);
+            $out[] = $val;
+            $run  += $val;
+        }
+        $out[] = max(0, $total - $run); // kunci total komponen
+        return $out;
+    }
+
+    public function run()
+    {
+        // ===== Konfigurasi Property/User =====
+        $property = DB::table('properties')->where('name', 'Sunnyday Inn')->first();
+        if (!$property) { $this->command->error('Property "Sunnyday Inn" tidak ditemukan!'); return; }
+
+        $propertyId = $property->id;
+        $userId     = DB::table('users')->value('id');
+
+        $days = 31; // Mei 2025
+
+        // ===== Target TOTAL NON-MICE (daily_incomes) =====
+        $totals = [
+            'corp_income'         => 40_207_004,  // Corporate
+            'offline_room_income' => 48_710_744,  // Walk-in
+            'ta_income'           => 23_091_901,  // OTA/TA
+            'breakfast_income'    => 22_842_975,  // Breakfast
+            'lunch_income'        => 6_271_074,   // Restaurant + Room Service
+            'others_income'       => 32_390_909,  // Other + Wellness + Laundry
+        ];
+        $targetNonMice = array_sum($totals); // 173,514,607
+
+        $this->command->info("→ Menulis NON-MICE ke daily_incomes (May 2025), target: " . number_format($targetNonMice, 0, ',', '.'));
+
+        // Bersihkan Mei
+        DB::table('daily_incomes')
+            ->where('property_id', $propertyId)
+            ->whereBetween('date', ['2025-05-01', '2025-05-31'])
+            ->delete();
+
+        // Distribusikan fluktuatif tiap komponen
+        $dist = [];
+        foreach ($totals as $k => $v) $dist[$k] = $this->distribute($v, $days);
+
+        // ===== Hard-lock SUM(total_revenue) bulanan supaya pas =====
+        $tempTotals = [];
+        for ($i = 0; $i < $days; $i++) {
+            $tempTotals[$i] =
+                $dist['corp_income'][$i] +
+                $dist['offline_room_income'][$i] +
+                $dist['ta_income'][$i] +
+                $dist['breakfast_income'][$i] +
+                $dist['lunch_income'][$i] +
+                $dist['others_income'][$i];
+        }
+        $sumNow = array_sum($tempTotals);
+        $delta  = $targetNonMice - $sumNow;                 // bisa +/-
+        $dist['others_income'][$days - 1] += $delta;        // kunci di hari terakhir
+        if ($dist['others_income'][$days - 1] < 0) {        // jaga-jaga
+            $need = -$dist['others_income'][$days - 1];
+            $dist['others_income'][$days - 1] = 0;
+            for ($i = $days - 2; $i >= 0 && $need > 0; $i--) {
+                $take = min($dist['others_income'][$i], $need);
+                $dist['others_income'][$i] -= $take;
+                $need -= $take;
+            }
+        }
+
+        // Insert harian NON-MICE
+        for ($d = 1; $d <= $days; $d++) {
+            $date = Carbon::create(2025, 5, $d)->toDateString();
+            $i    = $d - 1;
+
+            $corp   = $dist['corp_income'][$i];
+            $walkin = $dist['offline_room_income'][$i];
+            $ota    = $dist['ta_income'][$i];
+            $bfast  = $dist['breakfast_income'][$i];
+            $lunch  = $dist['lunch_income'][$i];
+            $other  = $dist['others_income'][$i];
+
+            $totalRooms = $corp + $walkin + $ota;
+            $totalFB    = $bfast + $lunch;
+            $totalAll   = $totalRooms + $totalFB + $other;
+
+            DB::table('daily_incomes')->insert([
+                'property_id'          => $propertyId,
+                'user_id'              => $userId,
+                'date'                 => $date,
+
+                'offline_rooms'        => rand(10, 22),
+                'offline_room_income'  => number_format($walkin, 2, '.', ''),
+                'ta_rooms'             => rand(2, 7),
+                'ta_income'            => number_format($ota, 2, '.', ''),
+                'corp_rooms'           => rand(4, 10),
+                'corp_income'          => number_format($corp, 2, '.', ''),
+
+                'breakfast_income'     => number_format($bfast, 2, '.', ''),
+                'lunch_income'         => number_format($lunch, 2, '.', ''),
+                'dinner_income'        => number_format(0, 2, '.', ''),
+                'others_income'        => number_format($other, 2, '.', ''),
+
+                'online_rooms'         => 0,
+                'online_room_income'   => number_format(0, 2, '.', ''),
+                'gov_rooms'            => 0,
+                'gov_income'           => number_format(0, 2, '.', ''),
+                'compliment_rooms'     => 0,
+                'compliment_income'    => number_format(0, 2, '.', ''),
+                'house_use_rooms'      => 0,
+                'house_use_income'     => number_format(0, 2, '.', ''),
+                'afiliasi_rooms'       => 0,
+                'afiliasi_room_income' => number_format(0, 2, '.', ''),
+                'mice_rooms'           => 0,
+                'mice_room_income'     => number_format(0, 2, '.', ''),
+
+                'total_rooms_sold'     => rand(20, 35),
+                'total_rooms_revenue'  => number_format($totalRooms, 2, '.', ''),
+                'total_fb_revenue'     => number_format($totalFB, 2, '.', ''),
+                'total_revenue'        => number_format($totalAll, 2, '.', ''),
+                'arr'                  => number_format(rand(300000, 390000), 2, '.', ''),
+                'occupancy'            => number_format(rand(25, 72), 2, '.', ''),
+                'created_at'           => now(),
+                'updated_at'           => now(),
+            ]);
+        }
+
+        // ===== MICE → bookings (total 237,925,620) =====
+        $this->command->info("→ Menulis MICE ke bookings (May 2025)...");
+        DB::table('bookings')
+            ->where('property_id', $propertyId)
+            ->whereBetween('event_date', ['2025-05-01', '2025-05-31'])
+            ->delete();
+
+        // 5 event realistis; total tepat 237,925,620
+        $bookings = [
+            [
+                'client_name'   => 'PT. Perikanan Nusantara',
+                'event_type'    => 'Rapat Kerja',
+                'event_date'    => '2025-05-05',
+                'participants'  => 140,
+                'total_price'   => 65_000_000,
+                'notes'         => 'Full-day + coffee break.',
+            ],
+            [
+                'client_name'   => 'Dinas Perindustrian',
+                'event_type'    => 'Seminar UMKM',
+                'event_date'    => '2025-05-12',
+                'participants'  => 120,
+                'total_price'   => 52_500_000,
+                'notes'         => 'Include backdrop & LCD.',
+            ],
+            [
+                'client_name'   => 'Komunitas Startup Papua',
+                'event_type'    => 'Pitch Day',
+                'event_date'    => '2025-05-18',
+                'participants'  => 90,
+                'total_price'   => 48_125_620,
+                'notes'         => 'Half-day + snack.',
+            ],
+            [
+                'client_name'   => 'PT. Logistik Merauke',
+                'event_type'    => 'Pelatihan Operasional',
+                'event_date'    => '2025-05-23',
+                'participants'  => 100,
+                'total_price'   => 36_300_000,
+                'notes'         => 'Full-day + sound system.',
+            ],
+            [
+                'client_name'   => 'Komunitas Seni Merauke',
+                'event_type'    => 'Pentas & Workshop',
+                'event_date'    => '2025-05-28',
+                'participants'  => 180,
+                'total_price'   => 36_000_000,
+                'notes'         => 'Hall + lighting.',
+            ],
+        ];
+
+        foreach ($bookings as $i => $b) {
+            DB::table('bookings')->insert([
+                'booking_number'   => sprintf('MICE-202505-%04d', $i + 1),
+                'booking_date'     => Carbon::parse($b['event_date'])->subDays(rand(5,10))->toDateString(),
+                'client_name'      => $b['client_name'],
+                'event_type'       => $b['event_type'],
+                'event_date'       => $b['event_date'],
+                'start_time'       => '09:00:00',
+                'end_time'         => '17:00:00',
+                'participants'     => $b['participants'],
+                'property_id'      => $propertyId,
+                'person_in_charge' => 'Bapak Budi Santoso',
+                'status'           => 'Booking Pasti',
+                'payment_status'   => 'Paid',
+                'total_price'      => number_format($b['total_price'], 2, '.', ''),
+                'down_payment'     => number_format($b['total_price'], 2, '.', ''),
+                'notes'            => $b['notes'],
+                'created_at'       => now(),
+                'updated_at'       => now(),
+                'mice_category_id' => null,
+                'room_id'          => null,
+            ]);
+        }
+
+        // Verifikasi akhir
+        $sumDaily = (float) DB::table('daily_incomes')
+            ->where('property_id', $propertyId)
+            ->whereBetween('date', ['2025-05-01', '2025-05-31'])
+            ->sum('total_revenue');
+
+        $sumMice = (float) DB::table('bookings')
+            ->where('property_id', $propertyId)
+            ->whereBetween('event_date', ['2025-05-01', '2025-05-31'])
+            ->sum('total_price');
+
+        $this->command->info('✅ NON-MICE: ' . number_format($sumDaily, 0, ',', '.') .
+            ' | MICE: ' . number_format($sumMice, 0, ',', '.') .
+            ' | TOTAL: ' . number_format($sumDaily + $sumMice, 0, ',', '.'));
+    }
+}
