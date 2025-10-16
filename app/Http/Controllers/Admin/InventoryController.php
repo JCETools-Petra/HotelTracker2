@@ -18,19 +18,38 @@ class InventoryController extends Controller
 
     public function index(Request $request)
     {
-        $property_id = $request->query('property_id');
-        if (!$property_id) {
-            return redirect()->route('admin.inventories.select')->with('error', 'Silakan pilih properti terlebih dahulu.');
+        $propertyId = $request->query('property_id');
+        $search = $request->query('search');
+    
+        if (!$propertyId) {
+            return redirect()->route('admin.inventories.select');
         }
-
-        $property = Property::findOrFail($property_id);
-        $inventories = Inventory::where('property_id', $property_id)->with('category')->latest()->paginate(10);
+    
+        $property = Property::findOrFail($propertyId);
+        $query = Inventory::where('property_id', $propertyId)->with('category');
+    
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('item_code', 'like', '%' . $search . '%')
+                  ->orWhereHas('category', function ($categoryQuery) use ($search) {
+                      $categoryQuery->where('name', 'like', '%' . $search . '%');
+                  });
+            });
+        }
+    
+        $inventories = $query->latest()->paginate(15)->withQueryString();
         
-        // --- PERBAIKAN DI SINI ---
-        // Menambahkan kembali logika untuk mengambil semua kategori untuk legenda
-        $allCategories = Category::all();
-        
-        return view('admin.inventories.index', compact('inventories', 'property', 'allCategories'));
+        // -- LOGIKA BARU DIMULAI DI SINI --
+        if ($request->ajax()) {
+            return view('admin.inventories._table_data', compact('inventories', 'property', 'search'))->render();
+        }
+        // -- LOGIKA BARU BERAKHIR DI SINI --
+    
+        // Ambil semua kategori untuk legenda di halaman utama
+        $allCategories = Category::orderBy('name')->get();
+    
+        return view('admin.inventories.index', compact('inventories', 'property', 'search', 'allCategories'));
     }
 
     public function create(Request $request)

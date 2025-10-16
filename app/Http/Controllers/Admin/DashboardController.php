@@ -19,6 +19,7 @@ use App\Models\Booking;
 use App\Models\PricePackage;
 use App\Exports\AdminPropertiesSummaryExport;
 use App\Exports\KpiAnalysisExport;
+use App\Exports\DashboardExport;
 
 class DashboardController extends Controller
 {
@@ -432,5 +433,27 @@ class DashboardController extends Controller
         
         // Panggil class ekspor utama dan kirim semua data mentah
         return Excel::download(new KpiAnalysisExport($filteredIncomes, $selectedProperty), $fileName);
+    }
+    
+    public function exportExcel(Request $request)
+    {
+        // Validasi input tanggal
+        $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+
+        // Ambil tanggal dari filter, jika tidak ada, gunakan rentang bulan ini
+        $startDate = $request->input('start_date') ? Carbon::parse($request->input('start_date')) : now()->startOfMonth();
+        $endDate = $request->input('end_date') ? Carbon::parse($request->input('end_date')) : now()->endOfMonth();
+
+        // Ambil semua properti
+        $properties = Property::orderBy('name')->get();
+        
+        // Buat nama file yang dinamis
+        $fileName = 'Laporan_Pendapatan_' . $startDate->format('d-m-Y') . '_-_' . $endDate->format('d-m-Y') . '.xlsx';
+
+        // Lakukan proses ekspor dan unduh file
+        return Excel::download(new DashboardExport($startDate, $endDate, $properties), $fileName);
     }
 }

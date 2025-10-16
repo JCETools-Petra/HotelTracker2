@@ -22,7 +22,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'role',
-        'property_id', // <-- TAMBAHKAN INI
+        'property_id',
     ];
 
     /**

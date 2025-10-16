@@ -31,9 +31,10 @@
             
             <div class="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
                 <form action="{{ route('admin.dashboard') }}" method="GET" id="filter-form" class="space-y-4">
+                    {{-- Input tersembunyi sekarang diisi dengan nilai awal dari controller --}}
                     <input type="hidden" name="property_id" id="property_id_hidden">
-                    <input type="hidden" name="start_date" id="start_date_hidden">
-                    <input type="hidden" name="end_date" id="end_date_hidden">
+                    <input type="hidden" name="start_date" id="start_date_hidden" value="{{ $startDate ? $startDate->toDateString() : '' }}">
+                    <input type="hidden" name="end_date" id="end_date_hidden" value="{{ $endDate ? $endDate->toDateString() : '' }}">
                     <input type="hidden" name="period" id="period_hidden">
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -125,10 +126,11 @@
                 <div class="flex flex-wrap justify-between items-center mt-8 mb-4">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Detail Properti</h3>
                     @if(!$properties->isEmpty())
-                    <div class="flex space-x-2">
-                        <a href="{{ route('admin.dashboard.export.excel', request()->query()) }}" class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest">Export Excel</a>
-                        <a href="{{ route('admin.dashboard.export.csv', request()->query()) }}" class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest">Export CSV</a>
-                    </div>
+                        <div class="flex space-x-2">
+                            <button type="button" id="export-excel-btn" class="inline-flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest">
+                                Export Excel
+                            </button>
+                        </div>
                     @endif
                 </div>
 
@@ -230,12 +232,33 @@
                     propertyIdHidden.value = propertySelect.value;
                     form.submit();
                 };
-
+                
+                // ======================================================
+                // === LOGIKA FILTER CEPAT YANG SUDAH DIPERBAIKI ===
+                // ======================================================
                 document.querySelectorAll('.quick-filter-btn').forEach(button => {
                     button.addEventListener('click', function() {
-                        periodHidden.value = this.dataset.period;
-                        startDateHidden.value = '';
-                        endDateHidden.value = '';
+                        const period = this.dataset.period;
+                        periodHidden.value = period;
+
+                        const now = new Date();
+                        // Gunakan tahun dari dropdown jika tersedia, jika tidak, gunakan tahun ini
+                        const year = yearSelect.value || now.getFullYear();
+                        const month = (now.getMonth() + 1).toString().padStart(2, '0');
+                        const day = now.getDate().toString().padStart(2, '0');
+                        
+                        if (period === 'today') {
+                            startDateHidden.value = `${year}-${month}-${day}`;
+                            endDateHidden.value = `${year}-${month}-${day}`;
+                        } else if (period === 'month') {
+                            startDateHidden.value = `${year}-${month}-01`;
+                            const lastDay = new Date(year, month, 0).getDate();
+                            endDateHidden.value = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+                        } else if (period === 'year') {
+                            startDateHidden.value = `${year}-01-01`;
+                            endDateHidden.value = `${year}-12-31`;
+                        }
+                        
                         submitForm();
                     });
                 });
@@ -269,6 +292,7 @@
                 populateDays();
                 toggleDaySelect();
                 
+                // --- SCRIPT UNTUK GRAFIK (TIDAK BERUBAH) ---
                 const isDarkMode = document.documentElement.classList.contains('dark');
                 Chart.defaults.color = isDarkMode ? '#e5e7eb' : '#6b7280';
                 Chart.defaults.borderColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
@@ -318,6 +342,28 @@
                         const barContainer = document.getElementById('barChartContainer');
                         barContainer.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">Tidak ada data pendapatan pada periode ini.</div>`;
                     }
+                }
+                
+                // --- SCRIPT BARU UNTUK EKSPOR EXCEL (TIDAK BERUBAH) ---
+                const exportButton = document.getElementById('export-excel-btn');
+                if (exportButton) {
+                    exportButton.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        const startDate = document.getElementById('start_date_hidden').value;
+                        const endDate = document.getElementById('end_date_hidden').value;
+                        
+                        let exportUrl = new URL("{{ route('admin.dashboard.exportExcel') }}", window.location.origin);
+                        
+                        if (startDate) {
+                            exportUrl.searchParams.append('start_date', startDate);
+                        }
+                        if (endDate) {
+                            exportUrl.searchParams.append('end_date', endDate);
+                        }
+                        
+                        window.location.href = exportUrl.toString();
+                    });
                 }
             });
         </script>

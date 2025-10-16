@@ -9,6 +9,10 @@
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 md:p-8">
+
+                    {{-- Menampilkan notifikasi sukses, error, atau validasi --}}
+                    <x-notification />
+
                     <form action="{{ route('admin.users.store') }}" method="POST">
                         @csrf
 
@@ -16,56 +20,50 @@
                         <div>
                             <x-input-label for="name" :value="__('Nama')" />
                             <x-text-input id="name" class="block mt-1 w-full" type="text" name="name" :value="old('name')" required autofocus />
-                            <x-input-error :messages="$errors->get('name')" class="mt-2" />
                         </div>
 
                         {{-- Email --}}
                         <div class="mt-4">
                             <x-input-label for="email" :value="__('Email')" />
                             <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required />
-                            <x-input-error :messages="$errors->get('email')" class="mt-2" />
                         </div>
 
                         {{-- Peran (Role) --}}
                         <div class="mt-4">
                             <x-input-label for="role" :value="__('Peran (Role)')" />
-                            <select name="role" id="role" class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm" required onchange="togglePropertySelect(this.value)">
+                            <select name="role" id="role" class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm" required>
                                 <option value="">-- Pilih Peran --</option>
                                 @foreach($roles as $roleValue => $roleLabel)
-                                    <option value="{{ $roleValue }}" {{ old('role') == $roleValue ? 'selected' : '' }}>
+                                    <option value="{{ $roleValue }}" @selected(old('role') == $roleValue)>
                                         {{ $roleLabel }}
                                     </option>
                                 @endforeach
                             </select>
-                            <x-input-error :messages="$errors->get('role')" class="mt-2" />
                         </div>
 
-                        {{-- Pilihan Properti (Akan muncul/sembunyi otomatis) --}}
+                        {{-- Pilihan Properti --}}
                         <div class="mt-4" id="property-select-container" style="display: none;">
                             <x-input-label for="property_id" :value="__('Properti yang Dikelola')" />
                             <select name="property_id" id="property_id" class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
                                 <option value="">-- Pilih Properti --</option>
                                 @foreach($properties as $property)
-                                    <option value="{{ $property->id }}" {{ old('property_id') == $property->id ? 'selected' : '' }}>
+                                    <option value="{{ $property->id }}" @selected(old('property_id') == $property->id)>
                                         {{ $property->name }}
                                     </option>
                                 @endforeach
                             </select>
-                            <x-input-error :messages="$errors->get('property_id')" class="mt-2" />
                         </div>
                         
                         {{-- Password --}}
                         <div class="mt-4">
                             <x-input-label for="password" :value="__('Password')" />
                             <x-text-input id="password" class="block mt-1 w-full" type="password" name="password" required autocomplete="new-password" />
-                            <x-input-error :messages="$errors->get('password')" class="mt-2" />
                         </div>
                         
                         {{-- Konfirmasi Password --}}
                         <div class="mt-4">
                             <x-input-label for="password_confirmation" :value="__('Konfirmasi Password')" />
                             <x-text-input id="password_confirmation" class="block mt-1 w-full" type="password" name="password_confirmation" required autocomplete="new-password" />
-                            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
                         </div>
 
                         <div class="flex items-center justify-end mt-6">
@@ -82,30 +80,31 @@
 
     @push('scripts')
     <script>
-        function togglePropertySelect(role) {
+        document.addEventListener('DOMContentLoaded', function() {
+            const roleSelect = document.getElementById('role');
             const propertySelectContainer = document.getElementById('property-select-container');
             const propertySelect = document.getElementById('property_id');
             
-            // !! PERUBAHAN ADA DI BARIS INI !!
-            // Menambahkan 'hk' ke dalam array rolesRequiringProperty
-            const rolesRequiringProperty = ['pengguna_properti', 'sales', 'online_ecommerce', 'hk'];
+            // Peran 'inventaris' ditambahkan ke daftar ini
+            const rolesRequiringProperty = ['pengguna_properti', 'sales', 'online_ecommerce', 'hk', 'inventaris'];
 
-            if (rolesRequiringProperty.includes(role)) {
-                propertySelectContainer.style.display = 'block';
-                propertySelect.required = true;
-            } else {
-                propertySelectContainer.style.display = 'none';
-                propertySelect.required = false;
-                propertySelect.value = ''; // Kosongkan pilihan saat disembunyikan
+            function togglePropertySelect() {
+                const selectedRole = roleSelect.value;
+                if (rolesRequiringProperty.includes(selectedRole)) {
+                    propertySelectContainer.style.display = 'block';
+                    propertySelect.required = true;
+                } else {
+                    propertySelectContainer.style.display = 'none';
+                    propertySelect.required = false;
+                    propertySelect.value = ''; // Selalu kosongkan jika tidak diperlukan
+                }
             }
-        }
+        
+            // Panggil fungsi saat halaman dimuat untuk menangani data 'old' jika validasi gagal
+            togglePropertySelect();
 
-        // Panggil fungsi ini saat halaman dimuat untuk menangani old('role')
-        document.addEventListener('DOMContentLoaded', function() {
-            const roleSelect = document.getElementById('role');
-            if (roleSelect.value) {
-                togglePropertySelect(roleSelect.value);
-            }
+            // Panggil fungsi setiap kali pilihan peran berubah
+            roleSelect.addEventListener('change', togglePropertySelect);
         });
     </script>
     @endpush
