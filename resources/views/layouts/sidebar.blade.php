@@ -1,11 +1,15 @@
-<aside class="flex-shrink-0 w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col">
-    <div class="h-16 flex items-center justify-center border-b dark:border-gray-700 px-4">
+{{-- resources/views/layouts/sidebar.blade.php --}}
+
+<aside class="flex flex-col h-full bg-white dark:bg-gray-800 border-r dark:border-gray-700">
+    {{-- Logo Header (Fixed) --}}
+    <div class="h-16 flex-shrink-0 flex items-center justify-center border-b dark:border-gray-700 px-4">
         <a href="{{ route('dashboard') }}" class="flex items-center space-x-2">
             <x-application-logo sizeKey="sidebar_logo_size" />
         </a>
     </div>
 
-    <nav class="flex-grow p-4 space-y-2">
+    {{-- Area Navigasi (Bisa di-scroll) --}}
+    <nav class="flex-1 overflow-y-auto p-4 space-y-2">
         @auth
             {{-- =================================== --}}
             {{--   MENU UNTUK ADMIN & OWNER (AKSES PENUH) --}}
@@ -39,16 +43,16 @@
                 {{-- Bagian Inventaris --}}
                 <p class="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase">Inventaris</p>
                 
-                <x-side-nav-link :href="route('admin.inventories.select')" :active="request()->routeIs('admin.inventories.*')">
-                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m0 10l8 4m-8-14v10l8 4"></path></svg></x-slot>
-                    {{ __('Master Inventaris') }}
+                <x-side-nav-link :href="route('admin.inventories.select')" :active="request()->routeIs('inventory.dashboard') || request()->routeIs('inventory.items.*') || request()->routeIs('admin.inventories.select')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg></x-slot>
+                    {{ __('Item') }}
                 </x-side-nav-link>
                 
                 <x-side-nav-link :href="route('admin.categories.index')" :active="request()->routeIs('admin.categories.*')">
                     <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></x-slot>
                     {{ __('Kategori Inventaris') }}
                 </x-side-nav-link>
-
+                
                 {{-- Bagian MICE --}}
                 <p class="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase">MICE</p>
 
@@ -99,7 +103,7 @@
                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></x-slot>
                    {{ __('Pengaturan') }}
                 </x-side-nav-link>
-
+            
             {{-- =================================== --}}
             {{--   MENU UNTUK PENGURUS (AKSES LIHAT) --}}
             {{-- =================================== --}}
@@ -122,6 +126,22 @@
                 <x-side-nav-link :href="route('admin.properties.index')" :active="request()->routeIs('admin.properties.index') || request()->routeIs('admin.properties.show')">
                     <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg></x-slot>
                     {{ __('Lihat Properti') }}
+                </x-side-nav-link>
+                
+            {{-- ============================ --}}
+            {{--   MENU UNTUK INVENTARIS      --}}
+            {{-- ============================ --}}
+            @elseif(Auth::user()->role === 'inventaris')
+                <p class="px-4 text-xs font-semibold text-gray-500 uppercase">Inventaris</p>
+                
+                <x-side-nav-link :href="route('inventory.dashboard')" :active="request()->routeIs('inventory.dashboard') || request()->routeIs('inventory.items.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg></x-slot>
+                    {{ __('Item') }}
+                </x-side-nav-link>
+                
+                <x-side-nav-link :href="route('inventory.categories.index')" :active="request()->routeIs('inventory.categories.*')">
+                    <x-slot name="icon"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg></x-slot>
+                    {{ __('Kelola Kategori') }}
                 </x-side-nav-link>
 
             {{-- ============================ --}}

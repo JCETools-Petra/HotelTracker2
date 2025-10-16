@@ -1,18 +1,31 @@
 <?php
-// app/Providers/AppServiceProvider.php
+
 namespace App\Providers;
 
-use Illuminate\Support\Facades\View; // <-- Tambahkan ini
-use Illuminate\Support\Facades\Cache; // <-- Tambahkan ini
-use App\Models\Setting; // <-- Tambahkan ini
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Blade; // <-- Tambahan baru
+use App\Models\Setting;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void { /* ... */ }
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        // ...
+    }
 
+    /**
+     * Bootstrap any application services.
+     */
     public function boot(): void
     {
+        // Mendaftarkan alias untuk komponen layout inventaris
+        Blade::component('layouts.inventory', 'inventory-layout'); // <-- Tambahan baru
+
         // Coba ambil pengaturan dari cache
         try {
             $settings = Cache::remember('app_settings', 60, function () {

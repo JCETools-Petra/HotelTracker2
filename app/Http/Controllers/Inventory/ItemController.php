@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Inventory;
-use App\Models\Category;
+use App\Models\Category; // <-- Pastikan ini ada
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 
 class ItemController extends Controller
 {
@@ -33,24 +34,36 @@ class ItemController extends Controller
             });
         }
         
-        $inventories = $query->latest()->paginate(20)->withQueryString();
+        // [PERBAIKAN 1] Ubah paginasi menjadi 10
+        $items = $query->latest()->paginate(10)->withQueryString();
         $property = Auth::user()->property;
 
-        return view('inventory.items.index', compact('inventories', 'property', 'search'));
-    }
+        // [LOGIKA BARU] Ambil semua kategori untuk legenda
+        $categories = Category::orderBy('name')->get();
 
+        // [LOGIKA BARU] Cek jika ini adalah request AJAX
+        if ($request->ajax()) {
+            return view('inventory.items._table_data', compact('items'))->render();
+        }
+
+        return view('inventory.items.index', compact('items', 'property', 'search', 'categories'));
+    }
+    
+    // ... sisa method (create, store, edit, dll) tidak perlu diubah ...
+    
     public function create()
     {
-        $categories = Category::where('property_id', $this->getUserPropertyId())->orderBy('name')->get();
-        return view('inventory.items.create', compact('categories'));
+        $categories = Category::orderBy('name')->get();
+        $categoriesJson = $categories->mapWithKeys(fn($cat) => [$cat->id => $cat->category_code]);
+        return view('inventory.items.create', compact('categories', 'categoriesJson'));
     }
 
     public function store(Request $request)
     {
         $propertyId = $this->getUserPropertyId();
+        
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'item_code' => ['required', 'string', 'max:50', Rule::unique('inventories')->where('property_id', $propertyId)],
             'category_id' => 'required|exists:categories,id',
             'stock' => 'required|integer|min:0',
             'unit' => 'required|string|max:50',
@@ -60,7 +73,17 @@ class ItemController extends Controller
             'purchase_date' => 'nullable|date',
         ]);
 
+        $category = Category::find($validated['category_id']);
+        $categoryCode = $category->category_code;
+        
+        do {
+            $randomPart = strtoupper(Str::random(5));
+            $itemCode = "{$categoryCode}-{$randomPart}";
+        } while (Inventory::where('item_code', $itemCode)->where('property_id', $propertyId)->exists());
+
+        $validated['item_code'] = $itemCode;
         $validated['property_id'] = $propertyId;
+        
         Inventory::create($validated);
 
         return redirect()->route('inventory.dashboard')->with('success', 'Item baru berhasil ditambahkan.');
@@ -71,7 +94,7 @@ class ItemController extends Controller
         if ($item->property_id !== $this->getUserPropertyId()) {
             abort(403);
         }
-        $categories = Category::where('property_id', $this->getUserPropertyId())->orderBy('name')->get();
+        $categories = Category::orderBy('name')->get();
         return view('inventory.items.edit', compact('item', 'categories'));
     }
 
@@ -82,9 +105,9 @@ class ItemController extends Controller
         }
 
         $propertyId = $this->getUserPropertyId();
+        
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'item_code' => ['required', 'string', 'max:50', Rule::unique('inventories')->where('property_id', $propertyId)->ignore($item->id)],
             'category_id' => 'required|exists:categories,id',
             'stock' => 'required|integer|min:0',
             'unit' => 'required|string|max:50',

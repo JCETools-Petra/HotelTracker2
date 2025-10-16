@@ -5,51 +5,51 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Inventory;
 use App\Models\Property;
-use App\Models\Category;
+use App\Models\Category; // <-- [PERBAIKAN] Tambahkan baris ini
 use Illuminate\Http\Request;
+use App\Exports\InventoryExport;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Str;
 
 class InventoryController extends Controller
 {
     public function select()
     {
-        $properties = Property::all();
+        $properties = Property::orderBy('name')->get();
         return view('admin.inventories.select_property', compact('properties'));
     }
 
     public function index(Request $request)
     {
         $propertyId = $request->query('property_id');
-        $search = $request->query('search');
-    
         if (!$propertyId) {
-            return redirect()->route('admin.inventories.select');
+            return redirect()->route('admin.inventories.select')->with('error', 'Silakan pilih properti terlebih dahulu.');
         }
-    
+
         $property = Property::findOrFail($propertyId);
         $query = Inventory::where('property_id', $propertyId)->with('category');
-    
+        
+        $search = $request->query('search');
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%')
-                  ->orWhere('item_code', 'like', '%' . $search . '%')
-                  ->orWhereHas('category', function ($categoryQuery) use ($search) {
-                      $categoryQuery->where('name', 'like', '%' . $search . '%');
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('item_code', 'like', "%{$search}%")
+                  ->orWhereHas('category', function ($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%");
                   });
             });
         }
-    
-        $inventories = $query->latest()->paginate(15)->withQueryString();
+
+        $inventories = $query->latest()->paginate(10)->withQueryString();
         
-        // -- LOGIKA BARU DIMULAI DI SINI --
+        // Baris ini sekarang akan berfungsi dengan benar
+        $allCategories = Category::orderBy('name')->get(); 
+
         if ($request->ajax()) {
-            return view('admin.inventories._table_data', compact('inventories', 'property', 'search'))->render();
+            return view('admin.inventories._table_data', ['inventories' => $inventories])->render();
         }
-        // -- LOGIKA BARU BERAKHIR DI SINI --
-    
-        // Ambil semua kategori untuk legenda di halaman utama
-        $allCategories = Category::orderBy('name')->get();
-    
-        return view('admin.inventories.index', compact('inventories', 'property', 'search', 'allCategories'));
+
+        return view('admin.inventories.index', compact('property', 'inventories', 'allCategories', 'search'));
     }
 
     public function create(Request $request)
@@ -134,5 +134,19 @@ class InventoryController extends Controller
         // ... (Fungsi destroy Anda sudah benar)
         $inventory->delete();
         return back()->with('success', 'Item inventaris berhasil dihapus.');
+    }
+    
+    public function exportExcel(Request $request)
+    {
+        $propertyId = $request->query('property_id');
+
+        if (!$propertyId) {
+            return redirect()->back()->with('error', 'Properti tidak ditemukan untuk diekspor.');
+        }
+
+        $property = Property::find($propertyId);
+        $fileName = 'Inventaris_' . Str::slug($property->name ?? 'property-' . $propertyId) . '_' . now()->format('Y-m-d') . '.xlsx';
+
+        return Excel::download(new InventoryExport($propertyId), $fileName);
     }
 }

@@ -9,17 +9,11 @@ use Carbon\Carbon;
 
 class InventoryCategoriesAndItemsSeeder extends Seeder
 {
-    /**
-     * Membuat singkatan dari nama kategori.
-     * Contoh: 'ADAMINISTRASI & GENERAL' menjadi 'AG'
-     */
     private function generateCategoryCode(string $name): string
     {
-        // Menghapus karakter '&' dan memisahkan berdasarkan spasi
         $words = explode(' ', str_replace('&', '', $name));
         $code = '';
         foreach ($words as $word) {
-            // Mengambil huruf pertama dari setiap kata
             if (!empty($word)) {
                 $code .= strtoupper(substr($word, 0, 1));
             }
@@ -27,45 +21,37 @@ class InventoryCategoriesAndItemsSeeder extends Seeder
         return $code;
     }
 
-    /**
-     * Seed categories and inventory item names.
-     */
     public function run(): void
     {
         $now = Carbon::now();
+        $propertyId = 16; // Tetapkan ID properti untuk item yang akan dibuat
 
-        // 1) Siapkan data kategori dengan kode yang dihasilkan secara dinamis
+        // 1. Siapkan dan masukkan/update data KATEGORI MASTER
         $categoryNames = [
             'ADAMINISTRASI & GENERAL', 'ENGINEERING', 'OFFICE EQUIPMENT', 'UPS', 'HOUSEKEEPING',
             'ROOM AMENITIES', 'SDB', 'MACHINE', 'STEAM CLEANER', 'OFFICE HOUSEKEEPING',
             'LAUNDRY', 'FORNT OFFICE', 'SALES & MARKEINT', 'KITCHEN TOOLS & EQUIPMENT'
         ];
 
-        $categories = [];
         foreach ($categoryNames as $name) {
-            $categories[] = [
-                'name' => $name,
-                'category_code' => $this->generateCategoryCode($name),
-            ];
-        }
-
-        // Masukkan atau perbarui kategori
-        foreach ($categories as $cat) {
             DB::table('categories')->updateOrInsert(
-                ['name' => $cat['name']],
+                ['name' => $name], // Cari berdasarkan nama yang unik
                 [
-                    'category_code' => $cat['category_code'],
-                    'created_at' => $now,
-                    'updated_at' => $now,
+                    'category_code' => $this->generateCategoryCode($name),
+                    'created_at'    => $now,
+                    'updated_at'    => $now,
                 ]
             );
         }
 
-        // Build a name->id dan name->code map untuk kategori
-        $categoryMap = DB::table('categories')->get()->pluck('id', 'name')->toArray();
-        $categoryCodeMap = DB::table('categories')->get()->pluck('category_code', 'name')->toArray();
+        // 2. Ambil semua kategori master yang ada untuk pemetaan
+        $categoryMap = DB::table('categories')->pluck('id', 'name')->toArray();
+        $categoryCodeMap = DB::table('categories')->pluck('category_code', 'name')->toArray();
+        
+        // 3. Hapus data INVENTARIS lama HANYA untuk properti ini
+        DB::table('inventories')->where('property_id', $propertyId)->delete();
 
-        // 2) Siapkan data inventaris (hanya nama + pemetaan kategori)
+        // 4. Siapkan data inventaris baru
         $rawItems = [
             ['name' => 'Telephone', 'category' => 'ADAMINISTRASI & GENERAL'],
             ['name' => 'Komputer + ups', 'category' => 'ADAMINISTRASI & GENERAL'],
@@ -574,48 +560,38 @@ class InventoryCategoriesAndItemsSeeder extends Seeder
             ['name' => 'box donat 50pcs', 'category' => 'KITCHEN TOOLS & EQUIPMENT']
         ];
 
-
-        $rows = [];
+        $itemsToInsert = [];
         foreach ($rawItems as $it) {
             $catName = $it['category'];
             $catId = $categoryMap[$catName] ?? null;
-            $catCode = $categoryCodeMap[$catName] ?? 'NULL';
+            
+            if ($catId) {
+                $catCode = $categoryCodeMap[$catName] ?? 'NULL';
+                $randomPart = strtoupper(Str::random(5));
+                $itemCode = "{$catCode}-{$randomPart}";
 
-            // Membuat item_code acak berdasarkan kode kategori
-            $randomPart = strtoupper(Str::random(5));
-            $itemCode = "{$catCode}-{$randomPart}";
-
-            $rows[] = [
-                'item_code' => $itemCode,
-                'property_id' => 14,
-                'name' => $it['name'],
-                'specification' => null,
-                'category_id' => $catId,
-                'stock' => 0,
-                'minimum_standard_quantity' => 0,
-                'unit' => 'pcs',
-                'unit_price' => 0.00,
-                'condition' => 'baik',
-                'purchase_date' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        // Hapus duplikat berdasarkan nama item + category_id untuk menghindari error jika seeder dijalankan ulang
-        $unique = [];
-        $filtered = [];
-        foreach ($rows as $r) {
-            $key = strtolower(($r['name'] ?? '') . '|' . ($r['category_id'] ?? '0'));
-            if (!isset($unique[$key])) {
-                $unique[$key] = true;
-                $filtered[] = $r;
+                $itemsToInsert[] = [
+                    'item_code'                 => $itemCode,
+                    'property_id'               => $propertyId,
+                    'name'                      => $it['name'],
+                    'category_id'               => $catId,
+                    'stock'                     => 0,
+                    'unit'                      => 'pcs',
+                    'condition'                 => 'baik',
+                    'unit_price'                => 0.00,
+                    'minimum_standard_quantity' => 0,
+                    'purchase_date'             => null,
+                    'created_at'                => $now,
+                    'updated_at'                => $now,
+                ];
             }
         }
 
-        // Lakukan insert dalam chunk untuk performa yang lebih baik
-        foreach (array_chunk($filtered, 500) as $chunk) {
+        // 5. Masukkan data item baru
+        foreach (array_chunk($itemsToInsert, 500) as $chunk) {
             DB::table('inventories')->insert($chunk);
         }
+        
+        $this->command->info('Master categories ensured and items have been seeded for property ID ' . $propertyId);
     }
 }

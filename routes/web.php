@@ -90,6 +90,7 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner,pengur
     Route::get('/properties/compare', [AdminPropertyController::class, 'showComparisonForm'])->name('properties.compare_page');
     Route::get('/properties/compare/results', [AdminPropertyController::class, 'showComparisonResults'])->name('properties.compare.results');
     Route::get('properties/{property}', [AdminPropertyController::class, 'show'])->name('properties.show');
+    Route::get('/inventories/export', [\App\Http\Controllers\Admin\InventoryController::class, 'exportExcel'])->name('inventories.export');
 });
 
 // Grup Admin - Manajemen
@@ -124,6 +125,7 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
         Route::delete('/destroy-room-type/{roomType}', [PricingRuleController::class, 'destroyRoomType'])->name('room-type.destroy');
         Route::put('/update-property-bars', [PricingRuleController::class, 'updatePropertyBars'])->name('property-bars.update');
     });
+    Route::get('/inventories/export', [\App\Http\Controllers\Admin\InventoryController::class, 'exportExcel'])->name('inventories.export');
 });
 
 // Grup Sales

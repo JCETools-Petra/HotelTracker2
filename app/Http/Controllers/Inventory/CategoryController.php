@@ -5,87 +5,98 @@ namespace App\Http\Controllers\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth; // Pastikan ini ada
 use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
-    private function getUserPropertyId()
+    /**
+     * Fungsi untuk membuat kode kategori dari nama.
+     */
+    private function generateCategoryCode(string $name): string
     {
-        return Auth::user()->property_id;
+        $words = explode(' ', str_replace('&', '', $name));
+        $code = '';
+        foreach ($words as $word) {
+            if (!empty($word)) {
+                $code .= strtoupper(substr($word, 0, 1));
+            }
+        }
+        return $code;
     }
 
+    /**
+     * Menampilkan daftar semua kategori master.
+     */
     public function index()
     {
-        $categories = Category::where('property_id', $this->getUserPropertyId())
-            ->latest()
-            ->paginate(15);
-        
+        $categories = Category::latest()->paginate(10);
         return view('inventory.categories.index', compact('categories'));
     }
 
+    /**
+     * Menampilkan form untuk membuat kategori baru.
+     */
     public function create()
     {
         return view('inventory.categories.create');
     }
 
+    /**
+     * Menyimpan kategori baru ke database.
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('categories')->where('property_id', $this->getUserPropertyId())],
-            'category_code' => ['required', 'string', 'max:50', Rule::unique('categories')->where('property_id', $this->getUserPropertyId())],
+            'name' => ['required', 'string', 'max:255', Rule::unique('categories')],
         ]);
+        
+        $validated['category_code'] = $this->generateCategoryCode($validated['name']);
 
-        Category::create([
-            'name' => $validated['name'],
-            'category_code' => strtoupper($validated['category_code']),
-            'property_id' => $this->getUserPropertyId(),
-        ]);
+        Category::create($validated);
 
-        return redirect()->route('inventory.categories.index')->with('success', 'Kategori baru berhasil dibuat.');
+        return redirect()->route('inventory.categories.index')->with('success', 'Kategori berhasil ditambahkan.');
     }
 
+    /**
+     * Menampilkan form untuk mengedit kategori.
+     */
     public function edit(Category $category)
     {
-        // Pastikan pengguna hanya bisa mengedit kategori dari propertinya sendiri
-        if ($category->property_id !== $this->getUserPropertyId()) {
-            abort(403);
-        }
+        // [PERBAIKAN] Pengecekan property_id dihapus dari sini.
         return view('inventory.categories.edit', compact('category'));
     }
 
+    /**
+     * Memperbarui kategori yang ada di database.
+     */
     public function update(Request $request, Category $category)
     {
-        if ($category->property_id !== $this->getUserPropertyId()) {
-            abort(403);
-        }
-
+        // [PERBAIKAN] Pengecekan property_id dihapus dari sini.
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('categories')->where('property_id', $this->getUserPropertyId())->ignore($category->id)],
-            'category_code' => ['required', 'string', 'max:50', Rule::unique('categories')->where('property_id', $this->getUserPropertyId())->ignore($category->id)],
+            'name' => ['required', 'string', 'max:255', Rule::unique('categories')->ignore($category->id)],
         ]);
+        
+        // Buat ulang kode jika nama berubah
+        $validated['category_code'] = $this->generateCategoryCode($validated['name']);
 
-        $category->update([
-            'name' => $validated['name'],
-            'category_code' => strtoupper($validated['category_code']),
-        ]);
+        $category->update($validated);
 
         return redirect()->route('inventory.categories.index')->with('success', 'Kategori berhasil diperbarui.');
     }
 
+    /**
+     * Menghapus kategori dari database.
+     */
     public function destroy(Category $category)
     {
-        if ($category->property_id !== $this->getUserPropertyId()) {
-            abort(403);
-        }
+        // [PERBAIKAN] Pengecekan property_id dihapus dari sini.
         
-        // Cek jika kategori masih digunakan oleh item
-        if ($category->inventories()->exists()) {
-            return back()->with('error', 'Kategori tidak dapat dihapus karena masih digunakan oleh beberapa item.');
+        if ($category->inventories()->count() > 0) {
+            return redirect()->route('inventory.categories.index')->with('error', 'Kategori tidak dapat dihapus karena masih digunakan oleh beberapa item.');
         }
 
         $category->delete();
-
         return redirect()->route('inventory.categories.index')->with('success', 'Kategori berhasil dihapus.');
     }
 }

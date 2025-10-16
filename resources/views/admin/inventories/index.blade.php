@@ -2,17 +2,27 @@
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             {{-- Bagian Header Halaman --}}
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
                 <div>
                     <h1 class="text-2xl font-semibold text-gray-800 dark:text-gray-200">Inventaris untuk {{ $property->name }}</h1>
                     <a href="{{ route('admin.inventories.select') }}" class="text-sm text-indigo-600 hover:text-indigo-900">Kembali ke pemilihan properti</a>
                 </div>
-                <a href="{{ route('admin.inventories.create', ['property_id' => $property->id]) }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md font-semibold text-xs uppercase hover:bg-indigo-700">
-                    Tambah Item Baru
-                </a>
+                
+                {{-- [MODIFIKASI] Grup Tombol Aksi --}}
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('admin.inventories.create', ['property_id' => $property->id]) }}" class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md font-semibold text-xs uppercase hover:bg-indigo-700">
+                        Tambah Item Baru
+                    </a>
+                    {{-- [TOMBOL BARU] Tombol Download Excel --}}
+                    <a href="{{ route('admin.inventories.export', ['property_id' => $property->id]) }}" 
+                       class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500 active:bg-green-700 focus:outline-none focus:border-green-700 focus:ring ring-green-300">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Download Excel
+                    </a>
+                </div>
             </div>
 
-            {{-- Form Pencarian (tambahkan id="search-form") --}}
+            {{-- Form Pencarian --}}
             <div class="mb-4">
                 <form id="search-form" method="GET" action="{{ route('admin.inventories.index') }}">
                     <input type="hidden" name="property_id" value="{{ $property->id }}">
@@ -34,14 +44,12 @@
 
             {{-- Tabel Daftar Inventaris --}}
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                {{-- Container untuk konten yang akan di-refresh (tambahkan id) --}}
                 <div id="inventory-table-container" class="p-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                    {{-- Muat data tabel awal menggunakan partial view --}}
                     @include('admin.inventories._table_data')
                 </div>
             </div>
 
-            {{-- Penjelasan Kolom Aksi & Legenda Kategori (TETAP DI LUAR) --}}
+            {{-- Legenda & Penjelasan --}}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
                  <div class="p-6 bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                      <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-200 border-b pb-3 dark:border-gray-700">
@@ -74,6 +82,7 @@
 
 @push('scripts')
 <script>
+// Script AJAX Anda sudah bagus dan tidak perlu diubah, biarkan seperti ini.
 document.addEventListener('DOMContentLoaded', function () {
     const tableContainer = document.getElementById('inventory-table-container');
 
