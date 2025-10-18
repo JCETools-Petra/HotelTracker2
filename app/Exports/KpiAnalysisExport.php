@@ -2,10 +2,7 @@
 
 namespace App\Exports;
 
-// ======================= PERBAIKAN DI SINI =======================
-use App\Exports\Sheets\KpiAnalysisMonthlySheet; // <-- TAMBAHKAN BARIS INI
-// =================================================================
-
+use App\Exports\Sheets\KpiAnalysisMonthlySheet;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 use Illuminate\Support\Collection;
@@ -26,9 +23,6 @@ class KpiAnalysisExport implements WithMultipleSheets
         $this->selectedProperty = $selectedProperty;
     }
 
-    /**
-     * Membuat array berisi objek sheet, satu untuk setiap bulan.
-     */
     public function sheets(): array
     {
         $sheets = [];
@@ -52,29 +46,29 @@ class KpiAnalysisExport implements WithMultipleSheets
                 ];
             });
 
-            // Baris ini sekarang akan berfungsi karena class-nya sudah diimpor
             $sheets[] = new KpiAnalysisMonthlySheet($monthName, $dailyData, $kpiData, $this->selectedProperty);
         }
 
         return $sheets;
     }
 
-    /**
-     * Fungsi helper untuk menghitung KPI untuk koleksi data bulanan.
-     */
     private function calculateMonthlyKpi(Collection $monthlyIncomes)
     {
         $totalRoomsSold = $monthlyIncomes->sum('total_rooms_sold');
         $totalRoomRevenue = $monthlyIncomes->sum('total_rooms_revenue');
+        
+        // Menghitung Resto Revenue (Hanya Lunch & Dinner) per Kamar Terjual
+        $totalLunchAndDinnerRevenue = $monthlyIncomes->sum('lunch_income') + $monthlyIncomes->sum('dinner_income');
+        $restoRevenuePerRoom = ($totalRoomsSold > 0) ? ($totalLunchAndDinnerRevenue / $totalRoomsSold) : 0;
         
         $firstDayOfMonth = Carbon::parse($monthlyIncomes->first()->date)->startOfMonth();
         $lastDayOfMonth = Carbon::parse($monthlyIncomes->first()->date)->endOfMonth();
         $numberOfDays = $firstDayOfMonth->diffInDays($lastDayOfMonth) + 1;
 
         if ($this->selectedProperty) {
-            $totalAvailableRooms = $this->selectedProperty->hotelRooms()->count() * $numberOfDays;
+            $totalAvailableRooms = $this->selectedProperty->total_rooms * $numberOfDays;
         } else {
-            $totalAvailableRooms = HotelRoom::count() * $numberOfDays;
+            $totalAvailableRooms = Property::sum('total_rooms') * $numberOfDays;
         }
 
         return [
@@ -83,6 +77,16 @@ class KpiAnalysisExport implements WithMultipleSheets
             'avgOccupancy' => $monthlyIncomes->avg('occupancy'),
             'avgArr' => ($totalRoomsSold > 0 ? ($totalRoomRevenue / $totalRoomsSold) : 0),
             'revPar' => ($totalAvailableRooms > 0 ? ($totalRoomRevenue / $totalAvailableRooms) : 0),
+            'restoRevenuePerRoom' => $restoRevenuePerRoom,
+
+            // Data Tambahan untuk Rincian di Excel
+            'totalRoomRevenue' => $totalRoomRevenue,
+            'totalFbRevenue' => $monthlyIncomes->sum('total_fb_revenue'),
+            'totalOtherRevenue' => $monthlyIncomes->sum('others_income'),
+            'totalBreakfastRevenue' => $monthlyIncomes->sum('breakfast_income'),
+            'totalLunchRevenue' => $monthlyIncomes->sum('lunch_income'),
+            'totalDinnerRevenue' => $monthlyIncomes->sum('dinner_income'),
+
             'revenueBreakdown' => [
                 'Offline' => $monthlyIncomes->sum('offline_room_income'), 'Online' => $monthlyIncomes->sum('online_room_income'),
                 'Travel Agent' => $monthlyIncomes->sum('ta_income'), 'Government' => $monthlyIncomes->sum('gov_income'),

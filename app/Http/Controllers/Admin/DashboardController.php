@@ -221,47 +221,57 @@ class DashboardController extends Controller
 
     public function kpiAnalysis(Request $request)
     {
-        // Method ini sudah benar, kita akan menyalin logikanya ke method export.
+        // Mengambil data untuk filter
         $properties = Property::orderBy('name')->get();
         
+        // Mengatur tanggal dan filter properti dari request
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
         $propertyId = $request->input('property_id');
-
+    
+        // Query data pendapatan harian berdasarkan filter
         $query = DailyIncome::whereBetween('date', [$startDate, $endDate]);
-
         if ($propertyId) {
             $query->where('property_id', $propertyId);
         }
-
         $filteredIncomes = $query->get();
-
+    
+        // Inisialisasi variabel untuk dikirim ke view
         $selectedProperty = $propertyId ? Property::find($propertyId) : null;
         $kpiData = null;
         $dailyData = collect();
-
+    
+        // Lakukan kalkulasi hanya jika ada data yang ditemukan
         if ($filteredIncomes->isNotEmpty()) {
+            // 1. Kalkulasi Agregat Dasar
             $totalRevenue = $filteredIncomes->sum('total_revenue');
             $totalRoomRevenue = $filteredIncomes->sum('total_rooms_revenue');
             $totalFbRevenue = $filteredIncomes->sum('total_fb_revenue');
             $totalOtherRevenue = $filteredIncomes->sum('others_income');
             $totalRoomsSold = $filteredIncomes->sum('total_rooms_sold');
+            $totalBreakfastRevenue = $filteredIncomes->sum('breakfast_income');
+            $totalLunchRevenue = $filteredIncomes->sum('lunch_income');
+            $totalDinnerRevenue = $filteredIncomes->sum('dinner_income');
             
+            // 2. Kalkulasi KPI Utama
             $avgOccupancy = $totalRoomsSold > 0 ? $filteredIncomes->avg('occupancy') : 0;
             $avgArr = $totalRoomsSold > 0 ? ($totalRoomRevenue / $totalRoomsSold) : 0;
-
+            
+            // Menghitung Resto Revenue (Hanya Lunch & Dinner) per Kamar Terjual
+            $totalLunchAndDinnerRevenue = $filteredIncomes->sum('lunch_income') + $filteredIncomes->sum('dinner_income');
+            $restoRevenuePerRoom = $totalRoomsSold > 0 ? ($totalLunchAndDinnerRevenue / $totalRoomsSold) : 0;
+    
+            // 3. Kalkulasi RevPAR
             $numberOfDays = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1;
-
+            $totalAvailableRooms = 0;
             if ($selectedProperty) {
-                $totalRoomsInProperty = $selectedProperty->hotelRooms()->count();
-                $totalAvailableRooms = $totalRoomsInProperty * $numberOfDays;
+                $totalAvailableRooms = $selectedProperty->total_rooms * $numberOfDays;
             } else {
-                $totalRoomsInSystem = HotelRoom::count();
-                $totalAvailableRooms = $totalRoomsInSystem * $numberOfDays;
+                $totalAvailableRooms = Property::sum('total_rooms') * $numberOfDays;
             }
-
             $revPar = $totalAvailableRooms > 0 ? ($totalRoomRevenue / $totalAvailableRooms) : 0;
-
+    
+            // 4. Menyiapkan data rincian
             $revenueBreakdown = [
                 'Offline' => $filteredIncomes->sum('offline_room_income'), 'Online' => $filteredIncomes->sum('online_room_income'),
                 'Travel Agent' => $filteredIncomes->sum('ta_income'), 'Government' => $filteredIncomes->sum('gov_income'),
@@ -275,38 +285,55 @@ class DashboardController extends Controller
                 'House Use' => $filteredIncomes->sum('house_use_rooms'), 'Compliment' => $filteredIncomes->sum('compliment_rooms'),
             ];
             
+            // 5. Menggabungkan semua data KPI ke dalam satu array
             $kpiData = [
-                'totalRevenue' => $totalRevenue, 'totalRoomRevenue' => $totalRoomRevenue,
-                'totalFbRevenue' => $totalFbRevenue, 'totalOtherRevenue' => $totalOtherRevenue,
-                'totalRoomsSold' => $totalRoomsSold, 'avgOccupancy' => $avgOccupancy,
-                'avgArr' => $avgArr, 'revPar' => $revPar,
-                'revenueBreakdown' => $revenueBreakdown, 'roomsSoldBreakdown' => $roomsSoldBreakdown,
+                'totalRevenue' => $totalRevenue,
+                'totalRoomRevenue' => $totalRoomRevenue,
+                'totalFbRevenue' => $totalFbRevenue,
+                'totalOtherRevenue' => $totalOtherRevenue,
+                'totalRoomsSold' => $totalRoomsSold,
+                'avgOccupancy' => $avgOccupancy,
+                'avgArr' => $avgArr,
+                'revPar' => $revPar,
+                'restoRevenuePerRoom' => $restoRevenuePerRoom,
+                'totalBreakfastRevenue' => $totalBreakfastRevenue,
+                'totalLunchRevenue' => $totalLunchRevenue,
+                'totalDinnerRevenue' => $totalDinnerRevenue,
+                'revenueBreakdown' => $revenueBreakdown,
+                'roomsSoldBreakdown' => $roomsSoldBreakdown,
             ];
-
+    
+            // 6. Menyiapkan data harian untuk tabel dan grafik
             if ($selectedProperty) {
                 $dailyData = $filteredIncomes->sortBy('date')->map(function ($income) {
                     return ['date' => Carbon::parse($income->date)->format('d M Y'), 'revenue' => $income->total_revenue, 'occupancy' => round($income->occupancy, 2), 'arr' => $income->arr, 'rooms_sold' => $income->total_rooms_sold];
                 });
             } else {
                 $dailyData = $filteredIncomes->groupBy('date')->map(function ($dailyIncomes, $date) {
-                    $totalRoomsSold = $dailyIncomes->sum('total_rooms_sold'); $totalRoomRevenue = $dailyIncomes->sum('total_rooms_revenue');
-                    return ['date' => Carbon::parse($date)->format('d M Y'), 'revenue' => $dailyIncomes->sum('total_revenue'), 'occupancy' => $dailyIncomes->avg('occupancy'), 'arr' => $totalRoomsSold > 0 ? $totalRoomRevenue / $totalRoomsSold : 0, 'rooms_sold' => $totalRoomsSold];
+                    $totalRoomsSold = $dailyIncomes->sum('total_rooms_sold');
+                    $totalRoomRevenue = $dailyIncomes->sum('total_rooms_revenue');
+                    return [
+                        'date' => Carbon::parse($date)->format('d M Y'),
+                        'revenue' => $dailyIncomes->sum('total_revenue'),
+                        'occupancy' => $dailyIncomes->avg('occupancy'),
+                        'arr' => $totalRoomsSold > 0 ? $totalRoomRevenue / $totalRoomsSold : 0,
+                        'rooms_sold' => $totalRoomsSold
+                    ];
                 })->sortBy('date')->values();
             }
         }
-
+    
+        // Mengirim semua data ke view
         return view('admin.kpi_analysis', compact('properties', 'selectedProperty', 'kpiData', 'dailyData', 'startDate', 'endDate', 'propertyId'));
     }
 
-
     public function exportPropertiesSummaryExcel(Request $request)
     {
-        // Logika untuk menentukan filter tanggal (sama seperti di method index)
         if ($request->has('start_date') && $request->has('end_date')) {
             $startDate = Carbon::parse($request->input('start_date'))->startOfDay();
             $endDate = Carbon::parse($request->input('end_date'))->endOfDay();
         } else {
-            $period = $request->input('period', 'year'); // Default 'year' jika tidak ada
+            $period = $request->input('period', 'year');
             switch ($period) {
                 case 'today':
                     $startDate = Carbon::today()->startOfDay();
@@ -326,35 +353,26 @@ class DashboardController extends Controller
         
         $propertyId = $request->input('property_id');
         
-        // Siapkan nama file
         $fileName = 'Laporan_Pendapatan_Properti_' . now()->format('d-m-Y_H-i') . '.xlsx';
         
-        // Panggil class export yang sudah ada dengan filter yang sesuai
         return Excel::download(new AdminPropertiesSummaryExport($startDate, $endDate, $propertyId), $fileName);
     }
 
-    /**
-     * Menangani ekspor data ringkasan properti ke CSV.
-     */
     public function exportPropertiesSummaryCsv(Request $request)
     {
         return Excel::download(new AdminPropertiesSummaryExport($request), 'properties-summary-'.now()->format('Ymd').'.csv');
     }
+
     public function unifiedCalendar()
     {
-        // Ambil semua properti untuk ditampilkan di filter dropdown
         $properties = Property::orderBy('name')->get();
-
         return view('admin.calendar.unified_index', compact('properties'));
     }
 
-    /**
-     * Menyediakan data event untuk kalender terpusat (Ecommerce atau Sales).
-     */
     public function getUnifiedCalendarEvents(Request $request)
     {
         $source = $request->query('source', 'ecommerce');
-        $propertyId = $request->query('property_id'); // Ambil ID properti dari request
+        $propertyId = $request->query('property_id');
         $response = [];
 
         if ($source === 'sales') {
@@ -382,20 +400,17 @@ class DashboardController extends Controller
             )->get();
             $response['events'] = $events;
 
-            // === LOGIKA CHART DENGAN FILTER PROPERTI ===
             $startDate = Carbon::now()->subDays(30);
             
             $chartQuery = DailyOccupancy::query()
                 ->where('date', '>=', $startDate);
 
-            // Terapkan filter jika ada properti yang dipilih
             if ($propertyId && $propertyId !== 'all') {
                 $chartQuery->where('property_id', $propertyId);
             }
 
             $chartOccupancyData = $chartQuery->select(
                     'date',
-                    // Gunakan SUM karena jika tidak ada filter, kita menjumlahkan semua properti
                     DB::raw('SUM(occupied_rooms) as total_occupied')
                 )
                 ->groupBy('date')
@@ -406,7 +421,6 @@ class DashboardController extends Controller
                 'labels' => $chartOccupancyData->pluck('date')->map(fn ($date) => Carbon::parse($date)->format('d M')),
                 'data' => $chartOccupancyData->pluck('total_occupied'),
             ];
-            // ===============================================
         }
 
         return response()->json($response);
@@ -424,36 +438,29 @@ class DashboardController extends Controller
             $query->where('property_id', $propertyId);
         }
     
-        // Ambil SEMUA data pendapatan dalam rentang tanggal
         $filteredIncomes = $query->get();
         
         $selectedProperty = $propertyId ? Property::find($propertyId) : null;
         
-        $fileName = 'laporan_kpi_' . ($selectedProperty->name ?? 'semua-properti') . '_' . now()->format('Ymd') . '.xlsx';
+        $fileName = 'laporan_kpi_' . (optional($selectedProperty)->name ?? 'semua-properti') . '_' . now()->format('Ymd') . '.xlsx';
         
-        // Panggil class ekspor utama dan kirim semua data mentah
         return Excel::download(new KpiAnalysisExport($filteredIncomes, $selectedProperty), $fileName);
     }
     
     public function exportExcel(Request $request)
     {
-        // Validasi input tanggal
         $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
         ]);
 
-        // Ambil tanggal dari filter, jika tidak ada, gunakan rentang bulan ini
         $startDate = $request->input('start_date') ? Carbon::parse($request->input('start_date')) : now()->startOfMonth();
         $endDate = $request->input('end_date') ? Carbon::parse($request->input('end_date')) : now()->endOfMonth();
 
-        // Ambil semua properti
         $properties = Property::orderBy('name')->get();
         
-        // Buat nama file yang dinamis
         $fileName = 'Laporan_Pendapatan_' . $startDate->format('d-m-Y') . '_-_' . $endDate->format('d-m-Y') . '.xlsx';
 
-        // Lakukan proses ekspor dan unduh file
         return Excel::download(new DashboardExport($startDate, $endDate, $properties), $fileName);
     }
 }

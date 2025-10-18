@@ -2,11 +2,11 @@
 
 namespace App\Exports\Sheets;
 
-use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithCharts;
+use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Chart\Chart;
 use PhpOffice\PhpSpreadsheet\Chart\DataSeries;
@@ -15,19 +15,19 @@ use PhpOffice\PhpSpreadsheet\Chart\Legend;
 use PhpOffice\PhpSpreadsheet\Chart\PlotArea;
 use PhpOffice\PhpSpreadsheet\Chart\Title;
 
-class KpiAnalysisMonthlySheet implements FromView, WithTitle, WithStyles, WithCharts
+class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithCharts, ShouldAutoSize
 {
-    private $monthlyData;
+    private $dailyData;
     private $kpiData;
     private $monthName;
-    private $selectedProperty;
+    private $property;
 
-    public function __construct(string $monthName, $monthlyData, $kpiData, $selectedProperty)
+    public function __construct(string $monthName, $dailyData, $kpiData, $property)
     {
         $this->monthName = $monthName;
-        $this->monthlyData = $monthlyData;
+        $this->dailyData = $dailyData;
         $this->kpiData = $kpiData;
-        $this->selectedProperty = $selectedProperty;
+        $this->property = $property;
     }
 
     public function title(): string
@@ -35,90 +35,167 @@ class KpiAnalysisMonthlySheet implements FromView, WithTitle, WithStyles, WithCh
         return $this->monthName;
     }
 
-    public function view(): View
+    public function array(): array
     {
-        return view('exports.kpi_analysis_monthly', [
-            'dailyData' => $this->monthlyData,
-            'kpiData' => $this->kpiData,
-            'monthName' => $this->monthName,
-            'selectedProperty' => $this->selectedProperty,
+        $data = [];
+
+        // --- Bagian Judul ---
+        $data[] = ['Laporan Analisis Kinerja (KPI)'];
+        $data[] = ['Properti: ' . ($this->property->name ?? 'Semua Properti')];
+        $data[] = ['Bulan: ' . $this->monthName];
+        $data[] = []; // Spasi
+
+        // --- Data untuk 3 Kolom ---
+        $kpiItems = [
+            'Total Pendapatan' => (float) $this->kpiData['totalRevenue'],
+            'Okupansi Rata-rata' => (float) $this->kpiData['avgOccupancy'] / 100,
+            'Average Room Rate (ARR)' => (float) $this->kpiData['avgArr'],
+            'Revenue Per Available Room (RevPAR)' => (float) $this->kpiData['revPar'],
+            'Resto Revenue Per Room (Sold)' => (float) $this->kpiData['restoRevenuePerRoom'],
+        ];
+
+        $revenueDetails = array_merge($this->kpiData['revenueBreakdown'], [
+            'Total Pendapatan Kamar' => (float) $this->kpiData['totalRoomRevenue'],
+            ' ' => null, // Spacer
+            'Breakfast' => (float) $this->kpiData['totalBreakfastRevenue'],
+            'Lunch' => (float) $this->kpiData['totalLunchRevenue'],
+            'Dinner' => (float) $this->kpiData['totalDinnerRevenue'],
+            'Total F&B' => (float) $this->kpiData['totalFbRevenue'],
+            'Lain-lain' => (float) $this->kpiData['totalOtherRevenue'],
         ]);
+
+        $roomsSoldDetails = $this->kpiData['roomsSoldBreakdown'];
+        $roomsSoldDetails['Total Kamar Terjual'] = (int) $this->kpiData['totalRoomsSold'];
+
+        $kpiKeys = array_keys($kpiItems);
+        $revenueKeys = array_keys($revenueDetails);
+        $roomsKeys = array_keys($roomsSoldDetails);
+        $maxRows = max(count($kpiKeys), count($revenueKeys), count($roomsKeys));
+        
+        $data[] = ['METRIK UTAMA', null, null, 'RINCIAN PENDAPATAN', null, null, 'RINCIAN KAMAR TERJUAL', null];
+
+        for ($i = 0; $i < $maxRows; $i++) {
+            $row = [
+                $kpiKeys[$i] ?? null,
+                isset($kpiKeys[$i]) ? $kpiItems[$kpiKeys[$i]] : null,
+                null,
+                $revenueKeys[$i] ?? null,
+                isset($revenueKeys[$i]) ? $revenueDetails[$revenueKeys[$i]] : null,
+                null,
+                $roomsKeys[$i] ?? null,
+                isset($roomsKeys[$i]) ? $roomsSoldDetails[$roomsKeys[$i]] : null,
+            ];
+            $data[] = $row;
+        }
+
+        $data[] = [];
+
+        $data[] = ['Tabel Rincian Harian'];
+        $data[] = ['Tanggal', 'Pendapatan', 'Okupansi (%)', 'ARR', 'Kamar Terjual'];
+        foreach ($this->dailyData as $daily) {
+            $data[] = [
+                $daily['date'],
+                (float) $daily['revenue'],
+                (float) $daily['occupancy'] / 100,
+                (float) $daily['arr'],
+                (int) $daily['rooms_sold'],
+            ];
+        }
+
+        return $data;
     }
 
-    /**
-     * ======================= GANTI SELURUH FUNGSI INI =======================
-     * Menambahkan styling profesional ke worksheet dengan format angka yang presisi.
-     */
     public function styles(Worksheet $sheet)
     {
-        // 1. Style untuk Judul Laporan
-        $sheet->mergeCells('A1:F1');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setARGB('FFFFFF');
-        $sheet->getStyle('A1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('2F5597');
-        $sheet->mergeCells('A2:F2');
-        $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(10)->getColor()->setARGB('FFFFFF');
-        $sheet->getStyle('A2')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('2F5597');
-    
-        // 2. Style untuk Header bagian Ringkasan
-        $sheet->getStyle('A4:F4')->getFont()->setBold(true);
-    
-        // 3. Definisikan format angka yang akan digunakan
         $currencyFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"??_);_(@_)';
-        // PERBAIKAN: Format ini akan menampilkan angka apa adanya dan menambahkan simbol % di belakang.
-        $percentFormat = '0.00"%"';
+        $percentFormat = '0.00%';
         $numberFormat = '#,##0';
-    
-        // 4. Terapkan format secara spesifik pada sel ringkasan
-        $sheet->getStyle('B5')->getNumberFormat()->setFormatCode($currencyFormat); // Total Pendapatan
-        $sheet->getStyle('B6')->getNumberFormat()->setFormatCode($percentFormat);  // Okupansi
-        $sheet->getStyle('B7')->getNumberFormat()->setFormatCode($currencyFormat); // ARR
-        $sheet->getStyle('B8')->getNumberFormat()->setFormatCode($currencyFormat); // RevPAR
-        $sheet->getStyle('B9')->getNumberFormat()->setFormatCode($numberFormat);   // Total Kamar Terjual
-        $sheet->getStyle('D5:D11')->getNumberFormat()->setFormatCode($currencyFormat); // Rincian Pendapatan
-        $sheet->getStyle('F5:F12')->getNumberFormat()->setFormatCode($numberFormat);   // Rincian Kamar Terjual
-    
-        // 5. Terapkan format pada tabel data harian
-        $headerRow = 15;
-        $firstDataRow = 16;
-        $lastDataRow = $headerRow + $this->monthlyData->count();
+        $borderStyle = \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN;
+        $allBorders = ['allBorders' => ['borderStyle' => $borderStyle]];
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => '4F81BD']],
+        ];
+        $mainTitleStyle = [
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => '2F5597']],
+        ];
+
+        // 1. Judul Utama dengan Latar Biru Tua
+        $sheet->mergeCells('A1:H1')->getStyle('A1')->applyFromArray($mainTitleStyle)->getFont()->setSize(16);
+        $sheet->mergeCells('A2:H2')->getStyle('A2')->applyFromArray($mainTitleStyle)->getFont()->setBold(true);
+        $sheet->mergeCells('A3:H3')->getStyle('A3')->applyFromArray($mainTitleStyle)->getFont()->setBold(true);
         
-        $sheet->getStyle('A'.$headerRow.':E'.$headerRow)->getFont()->setBold(true)->getColor()->setARGB('FFFFFF');
-        $sheet->getStyle('A'.$headerRow.':E'.$headerRow)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB('4F81BD');
-    
-        if ($this->monthlyData->isNotEmpty()) {
-            $sheet->getStyle('B'.$firstDataRow.':C'.$lastDataRow)->getNumberFormat()->setFormatCode($currencyFormat); // Pendapatan & ARR
-            $sheet->getStyle('D'.$firstDataRow.':D'.$lastDataRow)->getNumberFormat()->setFormatCode($percentFormat);  // Okupansi
-            $sheet->getStyle('E'.$firstDataRow.':E'.$lastDataRow)->getNumberFormat()->setFormatCode($numberFormat);   // Kamar Terjual
-        }
+        // 2. Header untuk 3 Kolom Rincian
+        $sheet->getStyle('A5:H5')->getFont()->setBold(true);
+
+        // 3. Menentukan baris terakhir dari rincian
+        $maxRows = max(count($this->kpiData['revenueBreakdown']) + 7, count($this->kpiData['roomsSoldBreakdown']) + 1, 5);
+        $lastDetailRow = 5 + $maxRows;
         
-        // 6. Auto-size kolom
-        foreach (range('A', 'O') as $columnID) {
-            $sheet->getColumnDimension($columnID)->setAutoSize(true);
+        // 4. Format dan Border untuk 3 Kolom
+        // Kolom 1: Metrik Utama
+        $sheet->getStyle("A6:B{$lastDetailRow}")->getBorders()->applyFromArray($allBorders);
+        $sheet->getStyle('B6')->getNumberFormat()->setFormatCode($currencyFormat); // Total Pendapatan
+        $sheet->getStyle('B7')->getNumberFormat()->setFormatCode($percentFormat);  // Okupansi
+        $sheet->getStyle('B8:B10')->getNumberFormat()->setFormatCode($currencyFormat); // ARR, RevPAR, Resto
+        
+        // Kolom 2: Rincian Pendapatan
+        $sheet->getStyle("D6:E{$lastDetailRow}")->getBorders()->applyFromArray($allBorders);
+        $sheet->getStyle('E6:E'.$lastDetailRow)->getNumberFormat()->setFormatCode($currencyFormat);
+        
+        // Kolom 3: Rincian Kamar Terjual
+        $sheet->getStyle("G6:H{$lastDetailRow}")->getBorders()->applyFromArray($allBorders);
+        $sheet->getStyle('H6:H'.$lastDetailRow)->getNumberFormat()->setFormatCode($numberFormat);
+
+        // Bold untuk Total
+        $totalRoomRevenueRow = 6 + count($this->kpiData['revenueBreakdown']);
+        $totalFbRow = $totalRoomRevenueRow + 5;
+        $totalRoomsSoldRow = 6 + count($this->kpiData['roomsSoldBreakdown']);
+        $sheet->getStyle("D{$totalRoomRevenueRow}:E{$totalRoomRevenueRow}")->getFont()->setBold(true);
+        $sheet->getStyle("D{$totalFbRow}:E{$totalFbRow}")->getFont()->setBold(true);
+        $sheet->getStyle("G{$totalRoomsSoldRow}:H{$totalRoomsSoldRow}")->getFont()->setBold(true);
+
+        // 5. Tabel Rincian Harian
+        $dailyTitleRow = $lastDetailRow + 2;
+        $dailyHeaderRow = $lastDetailRow + 3;
+        $sheet->getStyle("A{$dailyTitleRow}")->getFont()->setBold(true);
+        $sheet->getStyle("A{$dailyHeaderRow}:E{$dailyHeaderRow}")->applyFromArray($headerStyle);
+        if ($this->dailyData->isNotEmpty()) {
+            $lastDataRow = $dailyHeaderRow + $this->dailyData->count();
+            $sheet->getStyle("A{$dailyHeaderRow}:E{$lastDataRow}")->getBorders()->applyFromArray($allBorders);
+            $sheet->getStyle("B".($dailyHeaderRow+1).":B{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+            $sheet->getStyle("C".($dailyHeaderRow+1).":C{$lastDataRow}")->getNumberFormat()->setFormatCode($percentFormat);
+            $sheet->getStyle("D".($dailyHeaderRow+1).":D{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+            $sheet->getStyle("E".($dailyHeaderRow+1).":E{$lastDataRow}")->getNumberFormat()->setFormatCode($numberFormat);
         }
     }
 
     public function charts()
     {
-        // Method charts sudah benar, tidak perlu diubah
-        if ($this->monthlyData->isEmpty()) {
-            return [];
-        }
-        $dataRowCount = $this->monthlyData->count();
-        $headerRow = 15;
-        $firstDataRow = 16;
-        $lastDataRow = $firstDataRow + $dataRowCount - 1;
+        if ($this->dailyData->isEmpty()) { return []; }
+        
+        $maxRows = max(count($this->kpiData['revenueBreakdown']) + 7, count($this->kpiData['roomsSoldBreakdown']) + 1, 5);
+        $dailyHeaderRow = 5 + $maxRows + 3;
+        $firstDataRow = $dailyHeaderRow + 1;
+        $dataRowCount = $this->dailyData->count();
+        $lastDataRow = $dailyHeaderRow + $dataRowCount;
         $sheetName = $this->title();
-        $chartLabels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$A\${$firstDataRow}:\$A\${$lastDataRow}", null, $dataRowCount)];
-        $chartCategories = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$B\${$headerRow}", null, 1)];
-        $chartValues = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER, "'{$sheetName}'!\$B\${$firstDataRow}:\$B\${$lastDataRow}", null, $dataRowCount)];
-        $series = new DataSeries(DataSeries::TYPE_BARCHART, DataSeries::GROUPING_CLUSTERED, range(0, count($chartValues) - 1), $chartLabels, $chartCategories, $chartValues);
+
+        $labels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$A\${$firstDataRow}:\$A\${$lastDataRow}", null, $dataRowCount)];
+        $categories = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$B\${$dailyHeaderRow}", null, 1)];
+        $values = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER, "'{$sheetName}'!\$B\${$firstDataRow}:\$B\${$lastDataRow}", null, $dataRowCount)];
+        
+        $series = new DataSeries(DataSeries::TYPE_BARCHART, DataSeries::GROUPING_CLUSTERED, range(0, count($values) - 1), $labels, $categories, $values);
         $plotArea = new PlotArea(null, [$series]);
-        $legend = new Legend(Legend::POSITION_RIGHT, null, false);
+        $legend = new Legend(Legend::POSITION_BOTTOM, null, false);
         $title = new Title('Pendapatan Harian');
-        $yAxisLabel = new Title('Pendapatan (Rp)');
-        $chart = new Chart('chart_'.str_replace(' ', '_', $this->monthName), $title, $legend, $plotArea, true, 0, null, $yAxisLabel);
-        $chart->setTopLeftPosition('G2');
-        $chart->setBottomRightPosition('O20');
+        
+        $chart = new Chart('chart_'.str_replace(' ', '_', $this->monthName), $title, $legend, $plotArea);
+        
+        $chart->setTopLeftPosition('J5');
+        $chart->setBottomRightPosition('T25');
+
         return $chart;
     }
 }

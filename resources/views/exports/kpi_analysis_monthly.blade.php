@@ -1,83 +1,95 @@
 <table>
-    {{-- Hapus semua atribut colspan dari sini --}}
+    {{-- Baris Judul --}}
     <tr>
-        <td style="font-size: 16px; font-weight: bold;">Laporan Analisis Kinerja (KPI) - {{ $monthName }}</td>
+        <th colspan="8" style="font-size: 16px; font-weight: bold;">Laporan Analisis Kinerja (KPI)</th>
     </tr>
     <tr>
-        <td style="font-style: italic;">Properti: {{ $selectedProperty ? $selectedProperty->name : 'Semua Properti' }}</td>
+        <th colspan="8" style="font-weight: bold;">Properti: {{ htmlspecialchars($property->name ?? 'Semua Properti') }}</th>
     </tr>
-    <tr></tr>
+    <tr>
+        <th colspan="8" style="font-weight: bold;">Bulan: {{ htmlspecialchars($monthName) }}</th>
+    </tr>
+    <tr><td colspan="8"></td></tr>
 
-    @if($kpiData)
+    {{-- Header untuk 3 Kolom Rincian --}}
     <tr>
-        <td style="font-weight: bold;">METRIK UTAMA BULAN INI</td><td></td>
+        <td style="font-weight: bold;">METRIK UTAMA</td><td></td>
+        <td style="width: 5px;"></td>
         <td style="font-weight: bold;">RINCIAN PENDAPATAN</td><td></td>
+        <td style="width: 5px;"></td>
         <td style="font-weight: bold;">RINCIAN KAMAR TERJUAL</td><td></td>
     </tr>
-    <tr>
-        <td>Total Pendapatan</td><td>{{ $kpiData['totalRevenue'] }}</td>
-        <td>Offline</td><td>{{ $kpiData['revenueBreakdown']['Offline'] }}</td>
-        <td>Offline</td><td>{{ $kpiData['roomsSoldBreakdown']['Offline'] }}</td>
-    </tr>
-    <tr>
-        <td>Okupansi Rata-rata</td><td>{{ $kpiData['avgOccupancy'] }}%</td>
-        <td>Online</td><td>{{ $kpiData['revenueBreakdown']['Online'] }}</td>
-        <td>Online</td><td>{{ $kpiData['roomsSoldBreakdown']['Online'] }}</td>
-    </tr>
-    <tr>
-        <td>Average Room Rate (ARR)</td><td>{{ $kpiData['avgArr'] }}</td>
-        <td>Travel Agent</td><td>{{ $kpiData['revenueBreakdown']['Travel Agent'] }}</td>
-        <td>Travel Agent</td><td>{{ $kpiData['roomsSoldBreakdown']['Travel Agent'] }}</td>
-    </tr>
-    <tr>
-        <td>Revenue Per Available Room (RevPAR)</td><td>{{ $kpiData['revPar'] }}</td>
-        <td>Government</td><td>{{ $kpiData['revenueBreakdown']['Government'] }}</td>
-        <td>Government</td><td>{{ $kpiData['roomsSoldBreakdown']['Government'] }}</td>
-    </tr>
-    <tr>
-        <td>Total Kamar Terjual</td><td>{{ $kpiData['totalRoomsSold'] }}</td>
-        <td>Corporate</td><td>{{ $kpiData['revenueBreakdown']['Corporate'] }}</td>
-        <td>Corporate</td><td>{{ $kpiData['roomsSoldBreakdown']['Corporate'] }}</td>
-    </tr>
-    <tr>
-        <td></td><td></td>
-        <td>Afiliasi</td><td>{{ $kpiData['revenueBreakdown']['Afiliasi'] }}</td>
-        <td>Afiliasi</td><td>{{ $kpiData['roomsSoldBreakdown']['Afiliasi'] }}</td>
-    </tr>
-     <tr>
-        <td></td><td></td>
-        <td>MICE/Event</td><td>{{ $kpiData['revenueBreakdown']['MICE/Event'] }}</td>
-        <td>House Use</td><td>{{ $kpiData['roomsSoldBreakdown']['House Use'] }}</td>
-    </tr>
-    <tr>
-        <td></td><td></td>
-        <td></td><td></td>
-        <td>Compliment</td><td>{{ $kpiData['roomsSoldBreakdown']['Compliment'] }}</td>
-    </tr>
-    @endif
-    
-    <tr></tr><tr></tr>
 
+    {{-- Data untuk 3 Kolom --}}
+    @php
+        $kpiItems = [
+            'Total Pendapatan' => $kpiData['totalRevenue'],
+            'Okupansi Rata-rata' => $kpiData['avgOccupancy'] / 100,
+            'Average Room Rate (ARR)' => $kpiData['avgArr'],
+            'Revenue Per Available Room (RevPAR)' => $kpiData['revPar'],
+            'Resto Revenue Per Room (Sold)' => $kpiData['restoRevenuePerRoom'],
+        ];
+        
+        // Gabungkan Rincian Pendapatan Kamar & Lainnya
+        $revenueDetails = array_merge($kpiData['revenueBreakdown'], [
+            'Total Pendapatan Kamar' => $kpiData['totalRoomRevenue'],
+            '' => '', // Spacer
+            'Breakfast' => $kpiData['totalBreakfastRevenue'],
+            'Lunch' => $kpiData['totalLunchRevenue'],
+            'Dinner' => $kpiData['totalDinnerRevenue'],
+            'Total F&B' => $kpiData['totalFbRevenue'],
+            'Lain-lain' => $kpiData['totalOtherRevenue'],
+        ]);
+
+        $roomsSoldDetails = $kpiData['roomsSoldBreakdown'];
+        $roomsSoldDetails['Total Kamar Terjual'] = $kpiData['totalRoomsSold'];
+
+        $kpiKeys = array_keys($kpiItems);
+        $revenueKeys = array_keys($revenueDetails);
+        $roomsKeys = array_keys($roomsSoldDetails);
+        $maxRows = max(count($kpiKeys), count($revenueKeys), count($roomsKeys));
+    @endphp
+
+    @for ($i = 0; $i < $maxRows; $i++)
+    <tr>
+        {{-- Kolom 1: Metrik Utama --}}
+        <td>{{ htmlspecialchars($kpiKeys[$i] ?? '') }}</td>
+        <td>{{ isset($kpiKeys[$i]) ? htmlspecialchars($kpiItems[$kpiKeys[$i]]) : '' }}</td>
+        <td></td>
+
+        {{-- Kolom 2: Rincian Pendapatan --}}
+        <td>{{ htmlspecialchars($revenueKeys[$i] ?? '') }}</td>
+        <td>{{ isset($revenueKeys[$i]) ? htmlspecialchars($revenueDetails[$revenueKeys[$i]]) : '' }}</td>
+        <td></td>
+
+        {{-- Kolom 3: Rincian Kamar Terjual --}}
+        <td>{{ htmlspecialchars($roomsKeys[$i] ?? '') }}</td>
+        <td>{{ isset($roomsKeys[$i]) ? htmlspecialchars($roomsSoldDetails[$roomsKeys[$i]]) : '' }}</td>
+    </tr>
+    @endfor
+    
+    <tr><td colspan="8"></td></tr>
+    
+    {{-- Tabel Rincian Harian --}}
     <thead>
+        <tr><th colspan="5" style="font-weight: bold;">Tabel Rincian Harian</th></tr>
         <tr>
             <th>Tanggal</th>
             <th>Pendapatan</th>
-            <th>ARR</th>
             <th>Okupansi (%)</th>
+            <th>ARR</th>
             <th>Kamar Terjual</th>
         </tr>
     </thead>
     <tbody>
-        @if($dailyData)
-            @foreach($dailyData as $data)
-                <tr>
-                    <td>{{ $data['date'] }}</td>
-                    <td>{{ $data['revenue'] }}</td>
-                    <td>{{ $data['arr'] }}</td>
-                    <td>{{ $data['occupancy'] }}</td>
-                    <td>{{ $data['rooms_sold'] }}</td>
-                </tr>
-            @endforeach
-        @endif
+        @foreach($dailyData as $data)
+            <tr>
+                <td>{{ htmlspecialchars($data['date']) }}</td>
+                <td>{{ htmlspecialchars($data['revenue']) }}</td>
+                <td>{{ htmlspecialchars($data['occupancy'] / 100) }}</td>
+                <td>{{ htmlspecialchars($data['arr']) }}</td>
+                <td>{{ htmlspecialchars($data['rooms_sold']) }}</td>
+            </tr>
+        @endforeach
     </tbody>
 </table>

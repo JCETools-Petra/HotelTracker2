@@ -63,7 +63,7 @@
 
             @if ($kpiData)
                 {{-- KARTU KPI UTAMA --}}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
                     <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                         <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pendapatan</h4>
                         <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-100">Rp {{ number_format($kpiData['totalRevenue'], 0, ',', '.') }}</p>
@@ -79,6 +79,10 @@
                     <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                         <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Revenue Per Available Room (RevPAR)</h4>
                         <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-100">Rp {{ number_format($kpiData['revPar'], 0, ',', '.') }}</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
+                        <h4 class="text-sm font-medium text-gray-500 dark:text-gray-400">Resto Revenue Per Room (Sold)</h4>
+                        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-100">Rp {{ number_format($kpiData['restoRevenuePerRoom'], 0, ',', '.') }}</p>
                     </div>
                 </div>
 
@@ -109,12 +113,29 @@
                     </div>
                      <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
                         <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-4">Pendapatan Lainnya</h4>
-                         <ul class="space-y-2">
+                        <ul class="space-y-2">
+                            {{-- Rincian Food & Beverage --}}
                             <li class="flex justify-between text-sm">
-                                <span class="text-gray-600 dark:text-gray-400">Food & Beverage</span>
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalFbRevenue'], 0, ',', '.') }}</span>
+                                <span class="text-gray-600 dark:text-gray-400">Breakfast</span>
+                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalBreakfastRevenue'], 0, ',', '.') }}</span>
                             </li>
                             <li class="flex justify-between text-sm">
+                                <span class="text-gray-600 dark:text-gray-400">Lunch</span>
+                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalLunchRevenue'], 0, ',', '.') }}</span>
+                            </li>
+                            <li class="flex justify-between text-sm">
+                                <span class="text-gray-600 dark:text-gray-400">Dinner</span>
+                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalDinnerRevenue'], 0, ',', '.') }}</span>
+                            </li>
+                    
+                            {{-- Total Food & Beverage --}}
+                            <li class="flex justify-between text-sm font-bold border-t pt-2 mt-2">
+                                <span class="text-gray-800 dark:text-gray-200">Total F&B</span>
+                                <span class="text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalFbRevenue'], 0, ',', '.') }}</span>
+                            </li>
+                    
+                            {{-- Pendapatan Lain-lain --}}
+                            <li class="flex justify-between text-sm mt-4">
                                 <span class="text-gray-600 dark:text-gray-400">Lain-lain</span>
                                 <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalOtherRevenue'], 0, ',', '.') }}</span>
                             </li>
@@ -184,7 +205,6 @@
         </div>
     </div>
     
-    {{-- SCRIPT UNTUK CHART.JS --}}
     @push('scripts')
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
@@ -235,7 +255,7 @@
                                 display: true,
                                 position: 'right',
                                 grid: {
-                                    drawOnChartArea: false, // only want the grid lines for one axis to show up
+                                    drawOnChartArea: false,
                                 },
                                 ticks: {
                                      callback: function(value, index, values) {
