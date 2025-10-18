@@ -8,85 +8,97 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
 use App\Models\Property;
-use App\Models\HotelRoom;
+use Carbon\CarbonPeriod;
 
 class KpiAnalysisExport implements WithMultipleSheets
 {
     use Exportable;
 
-    protected $filteredIncomes;
+    protected $kpiData;
+    protected $dailyData;
     protected $selectedProperty;
+    protected $filteredIncomes;
 
-    public function __construct(Collection $filteredIncomes, $selectedProperty)
+    public function __construct($kpiData, Collection $dailyData, ?Property $selectedProperty, Collection $filteredIncomes)
     {
-        $this->filteredIncomes = $filteredIncomes;
+        $this->kpiData = $kpiData;
+        $this->dailyData = $dailyData;
         $this->selectedProperty = $selectedProperty;
+        $this->filteredIncomes = $filteredIncomes;
     }
 
     public function sheets(): array
     {
         $sheets = [];
-        
+    
+        // Mengelompokkan data mentah per bulan (sudah ada di kode kamu)
         $incomesByMonth = $this->filteredIncomes->groupBy(function ($income) {
             return Carbon::parse($income->date)->format('Y-m');
         });
-
+    
         foreach ($incomesByMonth as $month => $monthlyIncomes) {
-            $monthName = Carbon::parse($month . '-01')->isoFormat('MMMM YYYY');
-            
-            $kpiData = $this->calculateMonthlyKpi($monthlyIncomes);
-            
-            $dailyData = $monthlyIncomes->sortBy('date')->map(function ($income) {
-                return [
-                    'date' => Carbon::parse($income->date)->format('d M Y'),
-                    'revenue' => $income->total_revenue,
-                    'arr' => $income->arr,
-                    'occupancy' => round($income->occupancy, 2),
-                    'rooms_sold' => $income->total_rooms_sold
-                ];
-            });
-
-            $sheets[] = new KpiAnalysisMonthlySheet($monthName, $dailyData, $kpiData, $this->selectedProperty);
+            $firstDayOfMonth = Carbon::parse($month . '-01')->startOfMonth();
+            $lastDayOfMonth  = Carbon::parse($month . '-01')->endOfMonth();
+            $monthName       = $firstDayOfMonth->isoFormat('MMMM YYYY');
+    
+            // KPI bulan ini
+            $monthlyKpiData = $this->calculateMonthlyKpi($monthlyIncomes, $firstDayOfMonth, $lastDayOfMonth);
+    
+            // Ambil dailyData yang memang milik bulan ini
+            $rawMonthlyDaily = $this->dailyData->filter(function ($item) use ($month) {
+                return Carbon::parse($item['date'])->format('Y-m') === $month;
+            })->values();
+    
+            // PAD: lengkapi 1..akhir bulan -> 0 jika kosong
+            $monthlyDailyData = $this->padMonthlyDailyData($rawMonthlyDaily, $firstDayOfMonth, $lastDayOfMonth);
+    
+            // Kirim yang SUDAH DIPAD ke sheet
+            $sheets[] = new \App\Exports\Sheets\KpiAnalysisMonthlySheet(
+                $monthName,
+                $monthlyDailyData,
+                $monthlyKpiData,
+                $this->selectedProperty
+            );
         }
-
+    
         return $sheets;
     }
 
-    private function calculateMonthlyKpi(Collection $monthlyIncomes)
+    // [PERBAIKAN] Menggunakan logika kalkulasi yang sama persis dengan Controller
+    private function calculateMonthlyKpi(Collection $monthlyIncomes, Carbon $firstDayOfMonth, Carbon $lastDayOfMonth)
     {
         $totalRoomsSold = $monthlyIncomes->sum('total_rooms_sold');
         $totalRoomRevenue = $monthlyIncomes->sum('total_rooms_revenue');
+
+        $avgOccupancy = $monthlyIncomes->avg('occupancy');
+        $avgArr = ($totalRoomsSold > 0) ? ($totalRoomRevenue / $totalRoomsSold) : 0;
         
-        // Menghitung Resto Revenue (Hanya Lunch & Dinner) per Kamar Terjual
         $totalLunchAndDinnerRevenue = $monthlyIncomes->sum('lunch_income') + $monthlyIncomes->sum('dinner_income');
         $restoRevenuePerRoom = ($totalRoomsSold > 0) ? ($totalLunchAndDinnerRevenue / $totalRoomsSold) : 0;
         
-        $firstDayOfMonth = Carbon::parse($monthlyIncomes->first()->date)->startOfMonth();
-        $lastDayOfMonth = Carbon::parse($monthlyIncomes->first()->date)->endOfMonth();
         $numberOfDays = $firstDayOfMonth->diffInDays($lastDayOfMonth) + 1;
-
+        $totalAvailableRooms = 0;
         if ($this->selectedProperty) {
             $totalAvailableRooms = $this->selectedProperty->total_rooms * $numberOfDays;
         } else {
             $totalAvailableRooms = Property::sum('total_rooms') * $numberOfDays;
         }
+        $revPar = ($totalAvailableRooms > 0) ? ($totalRoomRevenue / $totalAvailableRooms) : 0;
 
+        // Mengembalikan struktur data yang sama persis seperti di controller
         return [
             'totalRevenue' => $monthlyIncomes->sum('total_revenue'),
             'totalRoomsSold' => $totalRoomsSold,
-            'avgOccupancy' => $monthlyIncomes->avg('occupancy'),
-            'avgArr' => ($totalRoomsSold > 0 ? ($totalRoomRevenue / $totalRoomsSold) : 0),
-            'revPar' => ($totalAvailableRooms > 0 ? ($totalRoomRevenue / $totalAvailableRooms) : 0),
+            'avgOccupancy' => $avgOccupancy,
+            'avgArr' => $avgArr,
+            'revPar' => $revPar,
             'restoRevenuePerRoom' => $restoRevenuePerRoom,
-
-            // Data Tambahan untuk Rincian di Excel
             'totalRoomRevenue' => $totalRoomRevenue,
             'totalFbRevenue' => $monthlyIncomes->sum('total_fb_revenue'),
             'totalOtherRevenue' => $monthlyIncomes->sum('others_income'),
             'totalBreakfastRevenue' => $monthlyIncomes->sum('breakfast_income'),
             'totalLunchRevenue' => $monthlyIncomes->sum('lunch_income'),
             'totalDinnerRevenue' => $monthlyIncomes->sum('dinner_income'),
-
             'revenueBreakdown' => [
                 'Offline' => $monthlyIncomes->sum('offline_room_income'), 'Online' => $monthlyIncomes->sum('online_room_income'),
                 'Travel Agent' => $monthlyIncomes->sum('ta_income'), 'Government' => $monthlyIncomes->sum('gov_income'),
@@ -101,4 +113,37 @@ class KpiAnalysisExport implements WithMultipleSheets
             ],
         ];
     }
+    
+    private function padMonthlyDailyData(Collection $daily, Carbon $firstDay, Carbon $lastDay): Collection
+    {
+        // index berdasar Y-m-d (supaya gampang dicocokkan)
+        $byYmd = $daily->keyBy(function ($row) {
+            return Carbon::parse($row['date'])->format('Y-m-d');
+        });
+    
+        $filled = collect();
+        $period = CarbonPeriod::create($firstDay, $lastDay);
+    
+        foreach ($period as $d) {
+            $key = $d->format('Y-m-d');
+    
+            if (isset($byYmd[$key])) {
+                $row = $byYmd[$key];
+                // pastikan tampilan tanggal konsisten
+                $row['date'] = $d->format('d M Y');
+                $filled->push($row);
+            } else {
+                $filled->push([
+                    'date'       => $d->format('d M Y'),
+                    'revenue'    => 0,
+                    'occupancy'  => 0,
+                    'arr'        => 0,
+                    'rooms_sold' => 0,
+                ]);
+            }
+        }
+    
+        return $filled->values(); // urut dari 01..akhir
+    }
+
 }
