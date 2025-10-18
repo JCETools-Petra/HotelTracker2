@@ -24,6 +24,7 @@ class Kernel extends ConsoleKernel
     {
         // $schedule->command('inspire')->hourly();
         $schedule->command('reservations:checkout-property')->dailyAt('11:00');
+        $schedule->command('inventory:check-low-stock')->daily();
     }
 
     /**

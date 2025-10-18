@@ -13,14 +13,12 @@
                         @csrf
                         <div class="space-y-6">
                             
-                            <!-- Nama Aplikasi -->
                             <div>
                                 <x-input-label for="app_name" :value="__('Nama Aplikasi')" />
                                 <x-text-input id="app_name" name="app_name" type="text" class="mt-1 block w-full" :value="old('app_name', $settings['app_name']->value ?? '')" required autofocus />
                                 <x-input-error class="mt-2" :messages="$errors->get('app_name')" />
                             </div>
 
-                            <!-- Logo Aplikasi -->
                             <div class="mt-4">
                                 <x-input-label for="logo_path" :value="__('Logo Aplikasi (Disarankan .png transparan)')" />
                                 <div class="mt-2 flex items-center space-x-4">
@@ -31,10 +29,7 @@
                                 </div>
                                 <x-input-error class="mt-2" :messages="$errors->get('logo_path')" />
                             </div>
-
-                            <!-- ============================================== -->
-                            <!-- >> AWAL: Form Input Baru untuk Favicon << -->
-                            <!-- ============================================== -->
+                            
                             <div class="mt-4">
                                 <x-input-label for="favicon_path" :value="__('Favicon (.png atau .ico)')" />
                                 <div class="mt-2 flex items-center space-x-4">
@@ -46,11 +41,7 @@
                                 <p class="text-xs text-gray-500 mt-1">Unggah gambar kotak (misal: 32x32 atau 64x64 piksel) untuk hasil terbaik.</p>
                                 <x-input-error class="mt-2" :messages="$errors->get('favicon_path')" />
                             </div>
-                            <!-- ============================================== -->
-                            <!-- >> AKHIR: Form Input Baru untuk Favicon <<  -->
-                            <!-- ============================================== -->
 
-                            <!-- Ukuran Logo -->
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                 <div>
                                     <x-input-label for="logo_size" :value="__('Ukuran Logo Login (px)')" />
@@ -65,12 +56,76 @@
                                     <x-input-error class="mt-2" :messages="$errors->get('sidebar_logo_size')" />
                                 </div>
                             </div>
+                            
+                            <div class="border-t border-gray-200 dark:border-gray-700 mt-6 pt-6">
+                                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                                    {{ __('Pengaturan Notifikasi Stok Rendah') }}
+                                </h3>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    {{ __('Atur notifikasi email untuk barang yang stoknya di bawah jumlah minimum.') }}
+                                </p>
 
+                                <div class="mt-4">
+                                    <x-input-label for="low_stock_notification" :value="__('Status Notifikasi')" />
+                                    <select id="low_stock_notification" name="low_stock_notification" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm">
+                                        <option value="1" {{ old('low_stock_notification', $settings['low_stock_notification']->value ?? 0) == 1 ? 'selected' : '' }}>
+                                            {{ __('Aktifkan') }}
+                                        </option>
+                                        <option value="0" {{ old('low_stock_notification', $settings['low_stock_notification']->value ?? 0) == 0 ? 'selected' : '' }}>
+                                            {{ __('Nonaktifkan') }}
+                                        </option>
+                                    </select>
+                                    <x-input-error class="mt-2" :messages="$errors->get('low_stock_notification')" />
+                                </div>
+
+                                <div class="mt-4">
+                                    <x-input-label for="low_stock_recipient_email" :value="__('Email Penerima Notifikasi')" />
+                                    <x-text-input id="low_stock_recipient_email" name="low_stock_recipient_email" type="email" class="mt-1 block w-full" :value="old('low_stock_recipient_email', $settings['low_stock_recipient_email']->value ?? '')" placeholder="contoh@email.com" />
+                                    <p class="text-xs text-gray-500 mt-1">Email yang akan menerima laporan stok rendah.</p>
+                                    <x-input-error class="mt-2" :messages="$errors->get('low_stock_recipient_email')" />
+                                </div>
+                            </div>
                             <div class="flex items-center gap-4 mt-6">
                                 <x-primary-button>{{ __('Simpan Pengaturan') }}</x-primary-button>
                             </div>
                         </div>
                     </form>
+                    <div class="border-t border-gray-200 dark:border-gray-700 mt-6 pt-6">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                            Kirim Laporan Stok Rendah (MSQ)
+                        </h3>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Pilih properti untuk mengirimkan laporan semua barang yang stoknya di bawah MSQ ke email yang telah diatur.
+                        </p>
+                        
+                        <form action="{{ route('admin.settings.testMsqEmail') }}" method="POST" class="mt-4">
+                            @csrf
+                            <div class="flex items-end gap-4">
+                                {{-- Dropdown untuk memilih properti --}}
+                                <div class="flex-grow">
+                                    <x-input-label for="property_id" :value="__('Pilih Properti')" />
+                                    <select id="property_id" name="property_id" class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm" required>
+                                        <option value="" disabled selected>-- Pilih salah satu properti --</option>
+                                        @foreach ($properties as $property)
+                                            <option value="{{ $property->id }}">{{ $property->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <x-input-error class="mt-2" :messages="$errors->get('property_id')" />
+                                </div>
+                    
+                                {{-- Tombol Kirim --}}
+                                <div>
+                                    <x-primary-button type="submit">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                                        </svg>
+                                        {{ __('Kirim Laporan') }}
+                                    </x-primary-button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>

@@ -126,6 +126,7 @@ Route::prefix('admin')->middleware(['auth', 'verified', 'role:admin,owner'])->na
         Route::put('/update-property-bars', [PricingRuleController::class, 'updatePropertyBars'])->name('property-bars.update');
     });
     Route::get('/inventories/export', [\App\Http\Controllers\Admin\InventoryController::class, 'exportExcel'])->name('inventories.export');
+    Route::post('/settings/test-msq-email', [\App\Http\Controllers\Admin\SettingController::class, 'sendTestMsqEmail'])->name('settings.testMsqEmail');
 });
 
 // Grup Sales
