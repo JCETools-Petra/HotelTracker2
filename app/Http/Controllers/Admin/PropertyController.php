@@ -275,7 +275,8 @@ class PropertyController extends Controller
 
         $properties = Property::whereIn('id', $propertyIds)->get();
 
-        $results = DailyIncome::whereIn('property_id', $propertyIds)
+        // 1. Ambil data pendapatan dari DailyIncome (TANPA MICE)
+        $incomeResults = DailyIncome::whereIn('property_id', $propertyIds)
             ->whereBetween('date', [$startDate, $endDate])
             ->groupBy('property_id')
             ->select(
@@ -288,24 +289,75 @@ class PropertyController extends Controller
                 DB::raw('SUM(afiliasi_room_income) as afiliasi_revenue, SUM(afiliasi_rooms) as afiliasi_rooms'),
                 DB::raw('SUM(total_rooms_revenue) as total_room_revenue, SUM(total_rooms_sold) as total_rooms_sold'),
                 DB::raw('SUM(total_fb_revenue) as total_fb_revenue'),
-                DB::raw('SUM(mice_room_income) as total_mice_revenue'),
+                // mice_room_income dihapus dari sini
                 DB::raw('SUM(others_income) as total_others_revenue'),
-                DB::raw('SUM(total_revenue) as total_overall_revenue'),
+                // total_revenue dihapus dari sini, akan dihitung manual
                 DB::raw('AVG(occupancy) as average_occupancy'),
                 DB::raw('SUM(total_rooms_revenue) / NULLIF(SUM(total_rooms_sold), 0) as average_arr')
             )
             ->get()
             ->keyBy('property_id');
 
-        // ======================= PERSIAPAN DATA GRAFIK YANG DIPERBAIKI =======================
+        // 2. Ambil data MICE dari tabel Booking
+        $miceResults = Booking::whereIn('property_id', $propertyIds)
+            ->where('status', 'Booking Pasti')
+            ->whereBetween('event_date', [$startDate, $endDate])
+            ->groupBy('property_id')
+            ->select(
+                'property_id',
+                DB::raw('SUM(total_price) as total_mice_revenue')
+            )
+            ->get()
+            ->keyBy('property_id');
+
+        // 3. Gabungkan hasil
+        $results = collect();
+        foreach ($properties as $property) {
+            $incomeData = $incomeResults->get($property->id);
+            $miceData = $miceResults->get($property->id);
+
+            $result = new \stdClass();
+            
+            // Salin data dari incomeResults (jika ada)
+            $result->offline_revenue = $incomeData->offline_revenue ?? 0;
+            $result->offline_rooms = $incomeData->offline_rooms ?? 0;
+            $result->online_revenue = $incomeData->online_revenue ?? 0;
+            $result->online_rooms = $incomeData->online_rooms ?? 0;
+            $result->ta_revenue = $incomeData->ta_revenue ?? 0;
+            $result->ta_rooms = $incomeData->ta_rooms ?? 0;
+            $result->gov_revenue = $incomeData->gov_revenue ?? 0;
+            $result->gov_rooms = $incomeData->gov_rooms ?? 0;
+            $result->corp_revenue = $incomeData->corp_revenue ?? 0;
+            $result->corp_rooms = $incomeData->corp_rooms ?? 0;
+            $result->afiliasi_revenue = $incomeData->afiliasi_revenue ?? 0;
+            $result->afiliasi_rooms = $incomeData->afiliasi_rooms ?? 0;
+            $result->total_room_revenue = $incomeData->total_room_revenue ?? 0;
+            $result->total_rooms_sold = $incomeData->total_rooms_sold ?? 0;
+            $result->total_fb_revenue = $incomeData->total_fb_revenue ?? 0;
+            $result->total_others_revenue = $incomeData->total_others_revenue ?? 0;
+            $result->average_occupancy = $incomeData->average_occupancy ?? 0;
+            $result->average_arr = $incomeData->average_arr ?? 0;
+
+            // Tambahkan data MICE dari miceResults
+            $result->total_mice_revenue = $miceData->total_mice_revenue ?? 0;
+
+            // 4. Hitung total keseluruhan secara manual
+            $result->total_overall_revenue = 
+                ($result->total_room_revenue ?? 0) + 
+                ($result->total_fb_revenue ?? 0) + 
+                ($result->total_others_revenue ?? 0) + 
+                ($result->total_mice_revenue ?? 0); // <-- MICE ditambahkan di sini
+
+            $results->put($property->id, $result);
+        }
+        
+        // ======================= PERSIAPAN DATA GRAFIK (TETAP SAMA) =======================
         $chartData = $properties->map(function ($property) use ($results) {
-            // Cek apakah ada hasil untuk properti ini
             $result = $results->get($property->id);
             
             return [
                 'label' => $property->name,
-                // Jika tidak ada hasil ($result), anggap pendapatannya 0
-                'revenue' => $result ? $result->total_overall_revenue : 0,
+                'revenue' => $result ? $result->total_overall_revenue : 0, // Ini akan menggunakan total_overall_revenue yang baru
                 'color' => $property->chart_color ?? sprintf('#%06X', mt_rand(0, 0xFFFFFF)),
             ];
         });

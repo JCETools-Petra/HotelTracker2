@@ -94,67 +94,110 @@
                     </div>
                 </div>
 
-                {{-- KARTU RINCIAN --}}
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                        <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-4">Rincian Pendapatan Kamar</h4>
-                        <ul class="space-y-2">
-                            @foreach($kpiData['revenueBreakdown'] as $source => $amount)
-                                <li class="flex justify-between text-sm">
-                                    <span class="text-gray-600 dark:text-gray-400">{{ $source }}</span>
-                                    <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($amount, 0, ',', '.') }}</span>
-                                </li>
-                            @endforeach
-                             <li class="flex justify-between text-sm font-bold border-t pt-2 mt-2">
-                                <span class="text-gray-800 dark:text-gray-200">Total</span>
-                                <span class="text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalRoomRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                        </ul>
+                {{-- [PERBAIKAN] BLOK RINCIAN DENGAN STRUKTUR BARU --}}
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mb-6">
+                    <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
+                        <div class="space-y-6">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Rincian Pendapatan</h3>
+                            
+                            <div>
+                                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200 mb-3">Pendapatan Kamar</h4>
+                                <ul class="space-y-2">
+                                    @foreach($kpiData['roomRevenueBreakdown'] as $source => $amount)
+                                        <li class="flex justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">{{ $source }}</span>
+                                            <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($amount, 0, ',', '.') }}</span>
+                                        </li>
+                                    @endforeach
+                                    <li class="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                                        <span>Total Pendapatan Kamar</span>
+                                        <span>Rp {{ number_format($kpiData['totalRoomRevenue'], 0, ',', '.') }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h4 class="text-base font-medium text-gray-800 dark:text-gray-200 mb-3">Pendapatan Lainnya</h4>
+                                <ul class="space-y-2">
+                                    @foreach($kpiData['fbRevenueBreakdown'] as $source => $amount)
+                                    <li class="flex justify-between text-sm">
+                                        <span class="text-gray-600 dark:text-gray-400">{{ $source }}</span>
+                                        <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($amount, 0, ',', '.') }}</span>
+                                    </li>
+                                    @endforeach
+                                    <li class="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                                        <span>Total F&B</span>
+                                        <span>Rp {{ number_format($kpiData['totalFbRevenue'], 0, ',', '.') }}</span>
+                                    </li>
+                                    <li class="pt-2"></li>
+                                    <li class="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                                        <span>MICE/Event</span>
+                                        <span>Rp {{ number_format($kpiData['miceRevenue'], 0, ',', '.') }}</span>
+                                    </li>
+                                    <li class="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                                        <span>Lain-lain</span>
+                                        <span>Rp {{ number_format($kpiData['totalOtherRevenue'], 0, ',', '.') }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div class="border-t-2 border-dashed border-gray-300 dark:border-gray-600 pt-3 mt-4">
+                                <div class="flex justify-between font-bold text-base">
+                                    <span class="text-gray-900 dark:text-gray-100">GRAND TOTAL PENDAPATAN</span>
+                                    <span class="text-gray-900 dark:text-gray-100">Rp {{ number_format($kpiData['grandTotalRevenue'], 0, ',', '.') }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-6">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Rincian Penjualan Kamar</h3>
+                            <div>
+                                <ul class="space-y-2">
+                                     @foreach($kpiData['roomsSoldBreakdown'] as $source => $qty)
+                                        <li class="flex justify-between text-sm">
+                                            <span class="text-gray-600 dark:text-gray-400">{{ $source }}</span>
+                                            <span class="font-semibold text-gray-800 dark:text-gray-200">{{ number_format($qty) }} kamar</span>
+                                        </li>
+                                    @endforeach
+                                    <li class="flex justify-between text-sm font-bold border-t border-gray-200 dark:border-gray-700 pt-2 mt-2">
+                                        <span>Total Kamar Terjual</span>
+                                        <span>{{ number_format($kpiData['totalRoomsSold']) }} kamar</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
-                     <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                        <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-4">Pendapatan Lainnya</h4>
-                        <ul class="space-y-2">
-                            {{-- Rincian Food & Beverage --}}
-                            <li class="flex justify-between text-sm">
-                                <span class="text-gray-600 dark:text-gray-400">Breakfast</span>
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalBreakfastRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                            <li class="flex justify-between text-sm">
-                                <span class="text-gray-600 dark:text-gray-400">Lunch</span>
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalLunchRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                            <li class="flex justify-between text-sm">
-                                <span class="text-gray-600 dark:text-gray-400">Dinner</span>
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalDinnerRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                    
-                            {{-- Total Food & Beverage --}}
-                            <li class="flex justify-between text-sm font-bold border-t pt-2 mt-2">
-                                <span class="text-gray-800 dark:text-gray-200">Total F&B</span>
-                                <span class="text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalFbRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                    
-                            {{-- Pendapatan Lain-lain --}}
-                            <li class="flex justify-between text-sm mt-4">
-                                <span class="text-gray-600 dark:text-gray-400">Lain-lain</span>
-                                <span class="font-semibold text-gray-800 dark:text-gray-200">Rp {{ number_format($kpiData['totalOtherRevenue'], 0, ',', '.') }}</span>
-                            </li>
-                        </ul>
-                    </div>
-                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm">
-                        <h4 class="text-base font-medium text-gray-900 dark:text-gray-100 mb-4">Rincian Kamar Terjual</h4>
-                        <ul class="space-y-2">
-                             @foreach($kpiData['roomsSoldBreakdown'] as $source => $qty)
-                                <li class="flex justify-between text-sm">
-                                    <span class="text-gray-600 dark:text-gray-400">{{ $source }}</span>
-                                    <span class="font-semibold text-gray-800 dark:text-gray-200">{{ number_format($qty) }}</span>
-                                </li>
-                            @endforeach
-                            <li class="flex justify-between text-sm font-bold border-t pt-2 mt-2">
-                                <span class="text-gray-800 dark:text-gray-200">Total Kamar Terjual</span>
-                                <span class="text-gray-800 dark:text-gray-200">{{ number_format($kpiData['totalRoomsSold']) }}</span>
-                            </li>
-                        </ul>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg mb-6">
+                    <div class="p-6 text-gray-900 dark:text-gray-100">
+                        <h3 class="text-lg font-semibold mb-4">Rincian MICE/Event</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Nama Klien</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Properti</th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Tanggal Event</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Harga</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                    @forelse ($miceBookings as $booking)
+                                        <tr>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{{ $booking->client_name }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ $booking->property->name ?? 'N/A' }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ \Carbon\Carbon::parse($booking->event_date)->isoFormat('D MMMM YYYY') }}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-gray-400">Rp {{ number_format($booking->total_price, 0, ',', '.') }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="4" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500 dark:text-gray-400">Tidak ada data MICE/Event pada periode ini.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -178,7 +221,7 @@
                                         <tr>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ $data['date'] }}</td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {{ number_format($data['revenue'], 0, ',', '.') }}</td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $data['occupancy'] }}%</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ number_format($data['occupancy'], 2) }}%</td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {{ number_format($data['arr'], 0, ',', '.') }}</td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $data['rooms_sold'] }}</td>
                                         </tr>
@@ -189,16 +232,14 @@
                     </div>
                 </div>
 
-            @elseif($propertyId)
-                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                     <div class="p-6 text-gray-900 dark:text-gray-100 text-center">
-                        Tidak ada data ditemukan untuk properti dan rentang tanggal yang dipilih.
-                    </div>
-                </div>
             @else
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                    <div class="p-6 text-gray-900 dark:text-gray-100 text-center">
-                        Silakan pilih properti untuk memulai analisis.
+                     <div class="p-6 text-gray-900 dark:text-gray-100 text-center">
+                        @if($propertyId)
+                            Tidak ada data ditemukan untuk properti dan rentang tanggal yang dipilih.
+                        @else
+                            Silakan pilih properti dan rentang tanggal untuk memulai analisis.
+                        @endif
                     </div>
                 </div>
             @endif
@@ -214,7 +255,6 @@
                 const labels = dailyData.map(item => item.date);
                 const revenueData = dailyData.map(item => item.revenue);
                 const occupancyData = dailyData.map(item => item.occupancy);
-                const arrData = dailyData.map(item => item.arr);
 
                 const ctx = document.getElementById('kpiChart').getContext('2d');
                 const kpiChart = new Chart(ctx, {
@@ -245,7 +285,7 @@
                                 display: true,
                                 position: 'left',
                                 ticks: {
-                                    callback: function(value, index, values) {
+                                    callback: function(value) {
                                         return 'Rp ' + new Intl.NumberFormat().format(value);
                                     }
                                 }
@@ -258,7 +298,7 @@
                                     drawOnChartArea: false,
                                 },
                                 ticks: {
-                                     callback: function(value, index, values) {
+                                     callback: function(value) {
                                         return value + '%';
                                     }
                                 }

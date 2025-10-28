@@ -20,7 +20,8 @@ use App\Models\PricePackage;
 use App\Exports\AdminPropertiesSummaryExport;
 use App\Exports\KpiAnalysisExport;
 use App\Exports\DashboardExport;
-use Illuminate\Support\Collection; // Pastikan ini di-import
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str; // Pastikan 'Str' di-import
 
 class DashboardController extends Controller
 {
@@ -29,6 +30,9 @@ class DashboardController extends Controller
         return $this->index($request);
     }
 
+    // =========================================================================
+    // FUNGSI INDEX (DASHBOARD UTAMA) - SUDAH BENAR, TIDAK DIUBAH
+    // =========================================================================
     public function index(Request $request)
     {
         // 1. Pengaturan Filter Tanggal
@@ -169,6 +173,9 @@ class DashboardController extends Controller
         ]);
     }
 
+    // =========================================================================
+    // FUNGSI SALES ANALYTICS - SUDAH BENAR, TIDAK DIUBAH
+    // =========================================================================
     public function salesAnalytics()
     {
         $totalEventRevenue = Booking::where('status', 'Booking Pasti')->sum('total_price');
@@ -220,18 +227,30 @@ class DashboardController extends Controller
         ));
     }
 
-    // --- [AWAL] BLOK KODE YANG DIREVISI ---
+
+    // =========================================================================
+    // --- [AWAL] BLOK KPI ANALYSIS YANG DIPERBARUI ---
+    // Logika di sini telah ditulis ulang untuk memperbaiki perhitungan
+    // MICE dan Okupansi Gabungan ("Semua Properti").
+    // =========================================================================
 
     /**
      * Menampilkan halaman analisis KPI dengan data yang sudah dihitung.
      */
     public function kpiAnalysis(Request $request)
     {
+        // Ambil daftar properti untuk filter
         $properties = Property::orderBy('name')->get();
-        // Menggunakan fungsi terpusat untuk mengambil dan menghitung data
+        
+        // Ambil semua data yang sudah dihitung dari fungsi terpusat
         $data = $this->getKpiAnalysisData($request);
 
-        return view('admin.kpi_analysis', array_merge($data, compact('properties')));
+        // [PERBAIKAN] Mengirim data ke view dengan cara yang lebih aman
+        // untuk menghindari error 'Undefined array key' jika $data kosong.
+        $viewData = $data;
+        $viewData['properties'] = $properties;
+
+        return view('admin.kpi_analysis', $viewData);
     }
 
     /**
@@ -241,14 +260,19 @@ class DashboardController extends Controller
     {
         // Menggunakan fungsi terpusat yang sama untuk konsistensi data
         $data = $this->getKpiAnalysisData($request);
-        $fileName = 'laporan_kpi_' . (optional($data['selectedProperty'])->name ?? 'semua-properti') . '_' . now()->format('Ymd') . '.xlsx';
         
-        // Mengirim data yang sudah benar ke Class Export
+        // Membuat nama file yang dinamis
+        $slug = Str::slug(optional($data['selectedProperty'])->name ?? 'semua-properti');
+        $fileName = 'Analisis_Kinerja_' . $slug . '_' . now()->format('YmdHis') . '.xlsx';
+        
+        // [PERBAIKAN] Mengirim 5 argumen yang diharapkan oleh KpiAnalysisExport
+        // (Berdasarkan struktur kode Anda sebelumnya)
         return Excel::download(new KpiAnalysisExport(
             $data['kpiData'], 
             $data['dailyData'], 
             $data['selectedProperty'],
-            $data['filteredIncomes'] // Data mentah tetap dikirim untuk pengelompokan per bulan
+            $data['filteredIncomes'], // Data mentah DailyIncome (untuk sheet bulanan)
+            $data['miceBookings']   // Data mentah Booking (untuk sheet bulanan)
         ), $fileName);
     }
 
@@ -261,89 +285,121 @@ class DashboardController extends Controller
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', Carbon::now()->endOfMonth()->toDateString());
         $propertyId = $request->input('property_id');
+        $selectedProperty = $propertyId ? Property::find($propertyId) : null;
 
-        // 1. Mengambil data mentah dari database
+        // 1. Ambil Data Pendapatan Harian (DailyIncome)
         $query = DailyIncome::whereBetween('date', [$startDate, $endDate]);
         if ($propertyId) {
             $query->where('property_id', $propertyId);
         }
         $filteredIncomes = $query->get();
 
-        $selectedProperty = $propertyId ? Property::find($propertyId) : null;
-        $kpiData = null;
-        $dailyData = collect();
-
-        // 2. Lakukan kalkulasi hanya jika ada data
-        if ($filteredIncomes->isNotEmpty()) {
-            // Kalkulasi data agregat (KPI utama)
-            $kpiData = $this->calculateKpi($filteredIncomes, $selectedProperty, $startDate, $endDate);
-            
-            // Menyiapkan rincian data harian
-            if ($selectedProperty) {
-                // Jika satu properti, data sudah per hari
-                $dailyData = $filteredIncomes->sortBy('date')->map(fn ($income) => $this->formatDailyData($income));
-            } else {
-                // Jika semua properti, gabungkan data pada tanggal yang sama
-                $dailyData = $filteredIncomes->groupBy('date')->map(function ($dailyIncomes, $date) {
-                    $totalRoomsSold = $dailyIncomes->sum('total_rooms_sold');
-                    $totalRoomRevenue = $dailyIncomes->sum('total_rooms_revenue');
-                    return [
-                        'date' => Carbon::parse($date)->format('d M Y'),
-                        'revenue' => $dailyIncomes->sum('total_revenue'),
-                        'occupancy' => $dailyIncomes->avg('occupancy'),
-                        'arr' => $totalRoomsSold > 0 ? $totalRoomRevenue / $totalRoomsSold : 0,
-                        'rooms_sold' => $totalRoomsSold,
-                    ];
-                })->sortBy('date')->values();
-            }
+        // 2. Ambil Data MICE (Booking)
+        $miceQuery = Booking::where('status', 'Booking Pasti')
+            ->whereBetween('event_date', [$startDate, $endDate]);
+        if ($propertyId) {
+            $miceQuery->where('property_id', $propertyId);
         }
+        
+        // Ambil koleksi MICE (untuk sheet bulanan di export)
+        $miceBookings = $miceQuery->with('property:id,name')->get();
+        // Ambil total MICE (untuk kalkulasi KPI)
+        $totalMiceRevenue = $miceBookings->sum('total_price');
 
-        return compact('selectedProperty', 'kpiData', 'dailyData', 'startDate', 'endDate', 'propertyId', 'filteredIncomes');
+        // 3. Kalkulasi Data KPI Agregat
+        // [PERBAIKAN] Memanggil fungsi kalkulasi yang sudah diperbaiki
+        // Ini dipanggil DI LUAR 'if' untuk memastikan $kpiData tidak pernah null
+        $kpiData = $this->calculateKpi($filteredIncomes, $selectedProperty, $startDate, $endDate, $totalMiceRevenue);
+        
+        // 4. Menyiapkan Data Harian (untuk Grafik)
+        // [PERBAIKAN] Memanggil fungsi chart yang sudah diperbaiki
+        $dailyData = $this->prepareDailyDataForChart($filteredIncomes, $selectedProperty, $miceBookings);
+
+        return [
+            'selectedProperty'   => $selectedProperty,
+            'startDate'          => $startDate,
+            'endDate'            => $endDate,
+            'kpiData'            => $kpiData,
+            'dailyData'          => $dailyData,
+            'filteredIncomes'    => $filteredIncomes, // Untuk dikirim ke Export
+            'miceBookings'       => $miceBookings,  // Untuk dikirim ke Export
+            'propertyId'         => $propertyId,
+        ];
     }
 
     /**
-     * Fungsi inti untuk menghitung semua metrik KPI agregat dari koleksi data pendapatan.
+     * Fungsi inti untuk menghitung semua metrik KPI agregat.
+     * [PERBAIKAN BESAR] Logika okupansi dan total pendapatan diperbaiki di sini.
      */
-    private function calculateKpi(Collection $incomes, ?Property $property, string $startDate, string $endDate): array
+    private function calculateKpi(Collection $incomes, ?Property $property, string $startDate, string $endDate, float $totalMiceRevenue = 0): array
     {
+        // 1. Ambil total dari koleksi DailyIncome
         $totalRoomsSold = $incomes->sum('total_rooms_sold');
-        $totalRoomRevenue = $incomes->sum('total_rooms_revenue');
+        $totalRoomRevenue = $incomes->sum('total_rooms_revenue'); // Hanya pendapatan kamar
+        $totalFbRevenue = $incomes->sum('total_fb_revenue');
+        $totalOtherRevenue = $incomes->sum('others_income');
 
-        // Menggunakan formula yang benar dan standar untuk KPI
-        $avgOccupancy = $incomes->avg('occupancy');
-        $avgArr = ($totalRoomsSold > 0) ? ($totalRoomRevenue / $totalRoomsSold) : 0;
-        
-        $totalLunchAndDinnerRevenue = $incomes->sum('lunch_income') + $incomes->sum('dinner_income');
-        $restoRevenuePerRoom = ($totalRoomsSold > 0) ? ($totalLunchAndDinnerRevenue / $totalRoomsSold) : 0;
-
+        // 2. Hitung Total Kamar Tersedia (Total Available Rooms)
         $numberOfDays = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1;
         $totalAvailableRooms = 0;
         if ($property) {
+            // Kasus 1: Satu properti dipilih
             $totalAvailableRooms = $property->total_rooms * $numberOfDays;
         } else {
+            // Kasus 2: "Semua Properti" dipilih
+            // [FIX] Jumlahkan total kamar dari SEMUA properti, lalu kalikan hari
             $totalAvailableRooms = Property::sum('total_rooms') * $numberOfDays;
         }
+
+        // 3. Hitung KPI Utama dengan rumus yang benar
+        
+        // [FIX] Okupansi dihitung dari Total Terjual / Total Tersedia
+        $avgOccupancy = ($totalAvailableRooms > 0) ? ($totalRoomsSold / $totalAvailableRooms * 100) : 0;
+        
+        // [FIX] ARR dihitung dari Total Pendapatan Kamar / Total Kamar Terjual
+        $avgArr = ($totalRoomsSold > 0) ? ($totalRoomRevenue / $totalRoomsSold) : 0;
+        
+        // [FIX] RevPAR dihitung dari Total Pendapatan Kamar / Total Kamar Tersedia
         $revPar = ($totalAvailableRooms > 0) ? ($totalRoomRevenue / $totalAvailableRooms) : 0;
 
+        $totalLunchAndDinnerRevenue = $incomes->sum('lunch_income') + $incomes->sum('dinner_income');
+        $restoRevenuePerRoom = ($totalRoomsSold > 0) ? ($totalLunchAndDinnerRevenue / $totalRoomsSold) : 0;
+
+        // [FIX] Grand Total dihitung manual, menjumlahkan SEMUA komponen
+        $grandTotalRevenue = $totalRoomRevenue + $totalFbRevenue + $totalOtherRevenue + $totalMiceRevenue;
+
+        // 4. Susun array untuk dikirim ke view
         return [
-            'totalRevenue' => $incomes->sum('total_revenue'),
+            // KPI Utama
+            'totalRevenue' => $grandTotalRevenue,
             'totalRoomsSold' => $totalRoomsSold,
             'avgOccupancy' => $avgOccupancy,
             'avgArr' => $avgArr,
             'revPar' => $revPar,
             'restoRevenuePerRoom' => $restoRevenuePerRoom,
+            
+            // Data yang dipecah untuk View
             'totalRoomRevenue' => $totalRoomRevenue,
-            'totalFbRevenue' => $incomes->sum('total_fb_revenue'),
-            'totalOtherRevenue' => $incomes->sum('others_income'),
-            'totalBreakfastRevenue' => $incomes->sum('breakfast_income'),
-            'totalLunchRevenue' => $incomes->sum('lunch_income'),
-            'totalDinnerRevenue' => $incomes->sum('dinner_income'),
-            'revenueBreakdown' => [
-                'Offline' => $incomes->sum('offline_room_income'), 'Online' => $incomes->sum('online_room_income'),
-                'Travel Agent' => $incomes->sum('ta_income'), 'Government' => $incomes->sum('gov_income'),
-                'Corporate' => $incomes->sum('corp_income'), 'Afiliasi' => $incomes->sum('afiliasi_room_income'),
-                'MICE/Event' => $incomes->sum('mice_room_income'),
+            'roomRevenueBreakdown' => [
+                'Offline' => $incomes->sum('offline_room_income'),
+                'Online' => $incomes->sum('online_room_income'),
+                'Travel Agent' => $incomes->sum('ta_income'),
+                'Government' => $incomes->sum('gov_income'),
+                'Corporate' => $incomes->sum('corp_income'),
+                'Afiliasi' => $incomes->sum('afiliasi_room_income'),
             ],
+            
+            'totalFbRevenue' => $totalFbRevenue,
+            'fbRevenueBreakdown' => [
+                'Breakfast' => $incomes->sum('breakfast_income'),
+                'Lunch' => $incomes->sum('lunch_income'),
+                'Dinner' => $incomes->sum('dinner_income'),
+            ],
+
+            'miceRevenue' => $totalMiceRevenue, // Total MICE dari parameter
+            'totalOtherRevenue' => $totalOtherRevenue,
+            'grandTotalRevenue' => $grandTotalRevenue, 
+
             'roomsSoldBreakdown' => [
                 'Offline' => $incomes->sum('offline_rooms'), 'Online' => $incomes->sum('online_rooms'),
                 'Travel Agent' => $incomes->sum('ta_rooms'), 'Government' => $incomes->sum('gov_rooms'),
@@ -354,20 +410,62 @@ class DashboardController extends Controller
     }
     
     /**
-     * Memformat satu baris data pendapatan harian.
+     * Menyiapkan data harian untuk grafik.
+     * [PERBAIKAN] Fungsi ini sekarang menggabungkan MICE ke data harian
+     * dan menghitung okupansi harian gabungan dengan benar.
      */
-    private function formatDailyData($income): array
+    private function prepareDailyDataForChart(Collection $incomes, ?Property $selectedProperty, Collection $miceBookings): Collection
     {
-        return [
-            'date' => Carbon::parse($income->date)->format('d M Y'),
-            'revenue' => $income->total_revenue,
-            'occupancy' => round($income->occupancy, 2),
-            'arr' => $income->arr,
-            'rooms_sold' => $income->total_rooms_sold
-        ];
+        // 1. Kelompokkan data harian dan MICE berdasarkan tanggal
+        $dailyGroups = $incomes->groupBy(fn($item) => Carbon::parse($item->date)->toDateString());
+        $miceGroups = $miceBookings->groupBy(fn($item) => Carbon::parse($item->event_date)->toDateString());
+
+        // 2. Dapatkan semua tanggal unik dari kedua sumber
+        $allDates = $dailyGroups->keys()->merge($miceGroups->keys())->unique()->sort();
+
+        // 3. Dapatkan total kamar tersedia (cukup sekali)
+        $totalAvailableRooms = 0;
+        if ($selectedProperty) {
+            $totalAvailableRooms = $selectedProperty->total_rooms;
+        } else {
+            // [FIX] Ini adalah total kamar harian untuk "Semua Properti"
+            $totalAvailableRooms = Property::sum('total_rooms');
+        }
+
+        // 4. Petakan setiap tanggal ke data KPI hariannya
+        return $allDates->map(function ($date) use ($dailyGroups, $miceGroups, $totalAvailableRooms) {
+            $incomeData = $dailyGroups->get($date) ?? collect();
+            $miceData = $miceGroups->get($date) ?? collect();
+
+            // Ambil total harian dari DailyIncome
+            $totalRoomsSold = $incomeData->sum('total_rooms_sold');
+            $totalRoomRevenue = $incomeData->sum('total_rooms_revenue');
+            $totalDailyIncomeRevenue = $incomeData->sum('total_revenue'); // Ini sudah termasuk F&B, Lainnya, dll.
+            
+            // Ambil total harian dari MICE
+            $totalMiceRevenue = $miceData->sum('total_price');
+
+            // Gabungkan
+            $grandTotalRevenue = $totalDailyIncomeRevenue + $totalMiceRevenue;
+
+            return [
+                'date' => Carbon::parse($date)->format('d M Y'),
+                'revenue' => $grandTotalRevenue,
+                // [FIX] Hitung okupansi harian gabungan
+                'occupancy' => $totalAvailableRooms > 0 ? ($totalRoomsSold / $totalAvailableRooms) * 100 : 0,
+                'arr' => $totalRoomsSold > 0 ? $totalRoomRevenue / $totalRoomsSold : 0,
+                'rooms_sold' => $totalRoomsSold,
+            ];
+        })->values();
     }
 
-    // --- [AKHIR] BLOK KODE YANG DIREVISI ---
+    // --- [AKHIR] BLOK KPI ANALYSIS YANG DIPERBARUI ---
+    // =========================================================================
+
+
+    // =========================================================================
+    // FUNGSI LAINNYA - SUDAH BENAR, TIDAK DIUBAH
+    // =========================================================================
 
     public function exportPropertiesSummaryExcel(Request $request)
     {

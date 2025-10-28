@@ -18,20 +18,22 @@ class KpiAnalysisExport implements WithMultipleSheets
     protected $dailyData;
     protected $selectedProperty;
     protected $filteredIncomes;
+    protected $miceBookings; // <-- [PERBAIKAN] Properti baru untuk menampung data MICE
 
-    public function __construct($kpiData, Collection $dailyData, ?Property $selectedProperty, Collection $filteredIncomes)
+    // [PERBAIKAN] Constructor diubah untuk menerima $miceBookings
+    public function __construct($kpiData, Collection $dailyData, ?Property $selectedProperty, Collection $filteredIncomes, Collection $miceBookings)
     {
         $this->kpiData = $kpiData;
         $this->dailyData = $dailyData;
         $this->selectedProperty = $selectedProperty;
         $this->filteredIncomes = $filteredIncomes;
+        $this->miceBookings = $miceBookings; // <-- Simpan data MICE
     }
 
     public function sheets(): array
     {
         $sheets = [];
     
-        // Mengelompokkan data mentah per bulan (sudah ada di kode kamu)
         $incomesByMonth = $this->filteredIncomes->groupBy(function ($income) {
             return Carbon::parse($income->date)->format('Y-m');
         });
@@ -41,30 +43,33 @@ class KpiAnalysisExport implements WithMultipleSheets
             $lastDayOfMonth  = Carbon::parse($month . '-01')->endOfMonth();
             $monthName       = $firstDayOfMonth->isoFormat('MMMM YYYY');
     
-            // KPI bulan ini
             $monthlyKpiData = $this->calculateMonthlyKpi($monthlyIncomes, $firstDayOfMonth, $lastDayOfMonth);
     
-            // Ambil dailyData yang memang milik bulan ini
             $rawMonthlyDaily = $this->dailyData->filter(function ($item) use ($month) {
-                return Carbon::parse($item['date'])->format('Y-m') === $month;
+                // Perbaiki format parsing tanggal agar konsisten
+                return Carbon::createFromFormat('d M Y', $item['date'])->format('Y-m') === $month;
             })->values();
-    
-            // PAD: lengkapi 1..akhir bulan -> 0 jika kosong
+
             $monthlyDailyData = $this->padMonthlyDailyData($rawMonthlyDaily, $firstDayOfMonth, $lastDayOfMonth);
-    
-            // Kirim yang SUDAH DIPAD ke sheet
+
+            // [PERBAIKAN] Filter data MICE khusus untuk bulan ini
+            $monthlyMiceBookings = $this->miceBookings->filter(function ($booking) use ($month) {
+                return Carbon::parse($booking->event_date)->format('Y-m') === $month;
+            });
+            
+            // [PERBAIKAN] Kirim data MICE yang sudah difilter ke class Sheet
             $sheets[] = new \App\Exports\Sheets\KpiAnalysisMonthlySheet(
                 $monthName,
                 $monthlyDailyData,
                 $monthlyKpiData,
-                $this->selectedProperty
+                $this->selectedProperty,
+                $monthlyMiceBookings // <-- Argumen baru
             );
         }
     
         return $sheets;
     }
 
-    // [PERBAIKAN] Menggunakan logika kalkulasi yang sama persis dengan Controller
     private function calculateMonthlyKpi(Collection $monthlyIncomes, Carbon $firstDayOfMonth, Carbon $lastDayOfMonth)
     {
         $totalRoomsSold = $monthlyIncomes->sum('total_rooms_sold');
@@ -85,7 +90,6 @@ class KpiAnalysisExport implements WithMultipleSheets
         }
         $revPar = ($totalAvailableRooms > 0) ? ($totalRoomRevenue / $totalAvailableRooms) : 0;
 
-        // Mengembalikan struktur data yang sama persis seperti di controller
         return [
             'totalRevenue' => $monthlyIncomes->sum('total_revenue'),
             'totalRoomsSold' => $totalRoomsSold,
@@ -116,9 +120,9 @@ class KpiAnalysisExport implements WithMultipleSheets
     
     private function padMonthlyDailyData(Collection $daily, Carbon $firstDay, Carbon $lastDay): Collection
     {
-        // index berdasar Y-m-d (supaya gampang dicocokkan)
         $byYmd = $daily->keyBy(function ($row) {
-            return Carbon::parse($row['date'])->format('Y-m-d');
+            // Perbaiki format parsing tanggal agar konsisten
+            return Carbon::createFromFormat('d M Y', $row['date'])->format('Y-m-d');
         });
     
         $filled = collect();
@@ -129,7 +133,6 @@ class KpiAnalysisExport implements WithMultipleSheets
     
             if (isset($byYmd[$key])) {
                 $row = $byYmd[$key];
-                // pastikan tampilan tanggal konsisten
                 $row['date'] = $d->format('d M Y');
                 $filled->push($row);
             } else {
@@ -143,7 +146,6 @@ class KpiAnalysisExport implements WithMultipleSheets
             }
         }
     
-        return $filled->values(); // urut dari 01..akhir
+        return $filled->values();
     }
-
 }
