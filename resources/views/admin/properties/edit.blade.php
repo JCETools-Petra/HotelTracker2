@@ -34,7 +34,12 @@
                             @enderror
                         </div>
                         {{-- ==================================================================== --}}
-
+                        <div class="mt-4">
+                            <label for="phone_number">Nomor HP Properti (untuk Notifikasi WA)</label>
+                            <input id="phone_number" type="text" name="phone_number" value="{{ old('phone_number', $property->phone_number ?? '') }}" 
+                                   class="block w-full mt-1 border-gray-300 rounded-md shadow-sm">
+                            <small>Diawali 62, contoh: 628123456789. Kosongkan jika tidak ada.</small>
+                        </div>
                         {{-- Tombol Simpan --}}
                         <div class="flex items-center justify-end mt-4">
                             <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded-md">

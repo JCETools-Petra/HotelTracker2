@@ -3,88 +3,65 @@
 namespace App\Http\Traits;
 
 use App\Models\Property;
-use App\Models\RoomType;
-use App\Models\DailyOccupancy;
+use App\Models\RoomType; // Pastikan ini ditambahkan
 
 trait CalculatesBarPrices
 {
     /**
-     * Menentukan level BAR yang aktif berdasarkan jumlah kamar terisi.
+     * Menentukan level BAR (integer 1-5) berdasarkan JUMLAH KAMAR.
+     * Logika ini dipindahkan dari DashboardController agar bisa dipakai di mana saja.
      *
-     * Logika baru (berdasarkan rentang yang diatur Admin):
-     * Admin mendefinisikan nilai MAKSIMUM untuk setiap level BAR.
-     * Diasumsikan: bar_1 < bar_2 < bar_3 < bar_4 < bar_5
-     *
-     * Contoh:
-     * bar_1 = 5  (Rentang BAR 1: 0-5)
-     * bar_2 = 20 (Rentang BAR 2: 6-20)
-     * bar_3 = 30 (Rentang BAR 3: 21-30)
-     * bar_4 = 40 (Rentang BAR 4: 31-40)
-     * bar_5 = 50 (Rentang BAR 5: 41-50, atau lebih jika > 50)
-     *
-     * @param int $occupiedRooms Jumlah kamar terisi.
-     * @param Property $property Model Properti (diasumsikan memiliki bar_1 s/d bar_5).
-     * @return int Level BAR yang aktif (1-5).
+     * @param int $occupiedRooms
+     * @param Property $property
+     * @return int
      */
-    private function getActiveBarLevel(int $occupiedRooms, Property $property): int
+    public function getActiveBarLevel(int $occupiedRooms, Property $property): int
     {
-        // $property->bar_X adalah nilai MAKSIMUM untuk level BAR tersebut.
-
-        // ======================================================
-        // BARIS DEBUG: HENTIKAN DAN TAMPILKAN NILAI
-        // ======================================================
-        dd($occupiedRooms, $property);
-        // ======================================================
-
-
-        // Level 1: (0 s/d bar_1)
-        // Jika 0 atau kurang, tetap anggap BAR 1
-        if ($occupiedRooms <= $property->bar_1) {
-            return 1;
-        }
+        // Membandingkan jumlah kamar terisi dengan ambang batas bar
+        // Asumsi: bar_1 s/d bar_5 berisi angka integer (ambang batas jumlah kamar)
         
-        // Level 2: (bar_1 + 1 s/d bar_2)
-        if ($occupiedRooms <= $property->bar_2) {
-            return 2;
-        }
+        // Cek dari BAR terendah ke tertinggi
+        if ($occupiedRooms <= $property->bar_1) return 1;
+        if ($occupiedRooms <= $property->bar_2) return 2;
+        if ($occupiedRooms <= $property->bar_3) return 3;
+        if ($occupiedRooms <= $property->bar_4) return 4;
         
-        // Level 3: (bar_2 + 1 s/d bar_3)
-        if ($occupiedRooms <= $property->bar_3) {
-            return 3;
-        }
-        
-        // Level 4: (bar_3 + 1 s/d bar_4)
-        if ($occupiedRooms <= $property->bar_4) {
-            return 4;
-        }
-
-        // Level 5: (bar_4 + 1 s/d bar_5 ATAU lebih)
-        // Kita periksa apakah kolom bar_5 ada dan di-set di properti
-        if (isset($property->bar_5)) {
-            // Jika okupansi masih di bawah atau sama dengan bar_5
-            if ($occupiedRooms <= $property->bar_5) {
-                return 5;
-            }
-            // Jika okupansi di atas bar_5, tetap BAR 5 (level tertinggi)
-            return 5;
-        }
-
-        // Fallback jika kolom bar_5 belum ada di database (logika lama)
-        // (occupiedRooms > bar_4)
+        // Jika di atas bar_4, atau bar_5 (jika ada)
+        // Logika di DashboardController sebelumnya adalah "return 5" jika di atas bar_4
         return 5;
     }
 
     /**
-     * Menghitung harga BAR yang aktif untuk satu tipe kamar.
-     * (Fungsi ini TIDAK PERLU DIUBAH)
+     * Menentukan NAMA BAR (string) berdasarkan level BAR.
+     * Ini yang akan kita simpan di $property->bar_active
+     *
+     * @param int $barLevel
+     * @return string
      */
-    private function calculateActiveBarPrice(RoomType $roomType, int $activeBarLevel)
+    public function getActiveBarName(int $barLevel): string
+    {
+        // Formatnya "bar_1", "bar_2", dst.
+        return 'bar_' . $barLevel;
+    }
+
+    /**
+     * Menghitung harga BAR yang aktif untuk satu tipe kamar.
+     * Logika ini dipindahkan dari DashboardController.
+     *
+     * @param RoomType $roomType
+     * @param int $activeBarLevel
+     * @return float|int
+     */
+    public function calculateActiveBarPrice(RoomType $roomType, int $activeBarLevel)
     {
         $rule = $roomType->pricingRule;
+        
+        // Jika tidak ada aturan harga, pakai harga dasar
         if (!$rule || !$rule->starting_bar) {
             return $roomType->bottom_rate;
         }
 
+        // Jika level BAR aktif di bawah starting_bar, pakai harga dasar
         if ($activeBarLevel < $rule->starting_bar) {
             return $rule->bottom_rate;
         }
@@ -92,6 +69,7 @@ trait CalculatesBarPrices
         $price = $rule->bottom_rate;
         $increaseFactor = 1 + ($rule->percentage_increase / 100);
 
+        // Hitung kenaikan harga berdasarkan level
         for ($i = 0; $i < ($activeBarLevel - $rule->starting_bar); $i++) {
             $price *= $increaseFactor;
         }

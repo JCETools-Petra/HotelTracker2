@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-// ===== BAGIAN USE STATEMENT (PASTIKAN SEMUA INI ADA) =====
 use App\Models\DailyIncome;
 use App\Models\Property;
 use App\Http\Traits\LogActivity;
@@ -15,11 +14,15 @@ use Illuminate\Support\Str;
 use App\Services\ReservationPriceService;
 use App\Models\DailyOccupancy;
 use App\Models\Reservation;
-use App\Events\OccupancyUpdated;
+// TAMBAHKAN KEMBALI EVENT INI
+use App\Events\OccupancyUpdated; 
+// TAMBAHKAN TRAIT
+use App\Http\Traits\CalculatesBarPrices;
 
 class PropertyIncomeController extends Controller
 {
-    use LogActivity;
+    // TAMBAHKAN TRAIT
+    use LogActivity, CalculatesBarPrices;
     
     protected $priceService;
 
@@ -80,7 +83,13 @@ class PropertyIncomeController extends Controller
             ->whereBetween('date', [$startOfMonth, $endOfMonth]);
 
         $totalRevenue = (clone $incomesThisMonthQuery)->sum('total_revenue');
+        
+        // ==========================================================
+        // >> INI ADALAH BARIS YANG DIPERBAIKI (TYPO) <<
+        // ==========================================================
         $totalRoomRevenue = (clone $incomesThisMonthQuery)->sum('total_rooms_revenue');
+        // ==========================================================
+        
         $totalFbRevenue = (clone $incomesThisMonthQuery)->sum('total_fb_revenue');
         $totalOthersIncome = (clone $incomesThisMonthQuery)->sum('others_income');
 
@@ -104,7 +113,6 @@ class PropertyIncomeController extends Controller
         ]);
     }
 
-
     public function updateOccupancy(Request $request)
     {
         $user = Auth::user();
@@ -121,6 +129,7 @@ class PropertyIncomeController extends Controller
     
         $manualRooms = $validated['occupied_rooms'];
     
+        // 1. Ambil atau buat data okupansi harian
         $dailyOccupancy = DailyOccupancy::firstOrCreate(
             [
                 'property_id' => $property->id,
@@ -133,11 +142,30 @@ class PropertyIncomeController extends Controller
             ]
         );
     
+        // 2. Hitung total okupansi baru (manual + ota)
         $dailyOccupancy->reservasi_properti = $manualRooms;
-        $dailyOccupancy->occupied_rooms = $dailyOccupancy->reservasi_ota + $manualRooms;
+        $totalOccupiedRooms = $dailyOccupancy->reservasi_ota + $manualRooms; 
+        $dailyOccupancy->occupied_rooms = $totalOccupiedRooms;
         $dailyOccupancy->save();
     
-        OccupancyUpdated::dispatch($property, $dailyOccupancy);
+        // 3. Tentukan BAR Level (angka 1-5)
+        $activeBarLevel = $this->getActiveBarLevel($totalOccupiedRooms, $property);
+        
+        // 4. Tentukan NAMA BAR (string "bar_1", "bar_2", dll)
+        $newActiveBarName = $this->getActiveBarName($activeBarLevel);
+
+        // 5. AMBIL NAMA BAR YANG LAMA (SEBELUM DISIMPAN)
+        $originalActiveBarName = $property->bar_active;
+
+        // 6. Set nilai 'bar_active' baru dan simpan
+        $property->bar_active = $newActiveBarName;
+        $property->save();
+
+        // 7. HANYA KIRIM NOTIFIKASI JIKA NAMA BAR BERUBAH
+        if ($newActiveBarName != $originalActiveBarName) {
+            // Kirim event dengan DUA ARGUMEN
+            event(new OccupancyUpdated($property, $dailyOccupancy));
+        }
         
         if (in_array(LogActivity::class, class_uses($this))) {
             $this->logActivity('Memperbarui okupansi properti manual menjadi ' . $manualRooms . ' kamar untuk tanggal ' . $validated['date'], $request);
@@ -262,7 +290,6 @@ class PropertyIncomeController extends Controller
             'date.unique' => 'Pendapatan untuk tanggal ini sudah pernah dicatat.',
         ]);
     
-        // Hapus semua perhitungan manual dari sini
         $incomeData = array_merge($validatedData, [
             'property_id' => $property->id,
             'user_id' => $user->id,
@@ -270,9 +297,8 @@ class PropertyIncomeController extends Controller
     
         $income = DailyIncome::create($incomeData);
     
-        // Panggil method kalkulasi terpusat dari model
         $income->recalculateTotals();
-        $income->save(); // Simpan setelah kalkulasi
+        $income->save();
     
         $formattedDate = Carbon::parse($income->date)->isoFormat('D MMMM YYYY');
         $this->logActivity('Mencatat pendapatan harian baru untuk tanggal ' . $formattedDate, $request, $property->id);
@@ -280,9 +306,6 @@ class PropertyIncomeController extends Controller
         return redirect()->route('property.income.index')->with('success', 'Pendapatan harian berhasil dicatat.');
     }
 
-    // ==========================================================
-    // >> AWAL PERUBAHAN <<
-    // ==========================================================
     public function edit(DailyIncome $income)
     {
         $user = Auth::user();
@@ -316,12 +339,10 @@ class PropertyIncomeController extends Controller
             'date.unique' => 'Pendapatan untuk tanggal ini sudah ada.',
         ]);
     
-        // Hapus semua perhitungan manual dari sini
         $income->update($validatedData);
 
-        // Panggil method kalkulasi terpusat dari model
         $income->recalculateTotals();
-        $income->save(); // Simpan setelah kalkulasi
+        $income->save();
     
         $formattedDate = Carbon::parse($income->date)->isoFormat('D MMMM YYYY');
         $this->logActivity('Memperbarui data pendapatan harian untuk tanggal ' . $formattedDate, $request, $income->property_id);
@@ -340,7 +361,6 @@ class PropertyIncomeController extends Controller
             return redirect()->route('login');
         }
         
-        // Menggunakan Policy untuk otorisasi
         $this->authorize('delete', $income);
 
         $originalDate = $income->date;
@@ -355,9 +375,6 @@ class PropertyIncomeController extends Controller
 
         return redirect()->route('property.income.index')->with('success', 'Data pendapatan untuk tanggal ' . $formattedDate . ' berhasil dihapus.');
     }
-    // ==========================================================
-    // >> AKHIR PERUBAHAN <<
-    // ==========================================================
 
     public function exportIncomesExcel(Request $request)
     {

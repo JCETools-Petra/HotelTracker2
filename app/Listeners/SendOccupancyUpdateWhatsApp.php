@@ -27,14 +27,36 @@ class SendOccupancyUpdateWhatsApp
         $property = $event->property;
         $occupancy = $event->occupancy;
 
-        $ecommerceUsers = User::where('role', 'online_ecommerce')
+        // === AWAL PERUBAHAN LOGIKA PENERIMA ===
+
+        // 1. Ambil nomor HP user e-commerce
+        $ecommercePhoneNumbers = User::where('role', 'online_ecommerce')
                            ->where('receives_whatsapp_notifications', true)
                            ->whereNotNull('phone_number')
-                           ->get();
+                           ->pluck('phone_number') // Ambil hanya kolom nomor HP
+                           ->all(); // Ubah menjadi array
 
-        if ($ecommerceUsers->isEmpty()) {
+        // 2. Ambil nomor HP properti
+        $propertyPhoneNumber = $property->phone_number;
+
+        // 3. Gabungkan semua nomor target
+        $allTargetNumbers = $ecommercePhoneNumbers;
+        if (!empty($propertyPhoneNumber)) {
+            $allTargetNumbers[] = $propertyPhoneNumber;
+        }
+
+        // 4. Buat unik (jika nomor properti sama dengan user e-commerce)
+        //    dan filter nilai kosong/null
+        $uniqueTargets = collect($allTargetNumbers)->filter()->unique()->all();
+
+        // 5. Jika tidak ada penerima sama sekali, hentikan
+        if (empty($uniqueTargets)) {
+            Log::info('Tidak ada target WA (ecommerce/properti) untuk okupansi properti: ' . $property->name);
             return;
         }
+        
+        // === AKHIR PERUBAHAN LOGIKA PENERIMA ===
+
 
         $fonnteToken = config('services.fonnte.token');
         if (!$fonnteToken) {
@@ -112,7 +134,8 @@ class SendOccupancyUpdateWhatsApp
 
         // === AKHIR PERUBAHAN ===
 
-        $targets = $ecommerceUsers->pluck('phone_number')->implode(',');
+        // Gunakan array $uniqueTargets yang sudah kita buat
+        $targets = implode(',', $uniqueTargets);
 
         try {
             $response = Http::withHeaders([

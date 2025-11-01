@@ -20,23 +20,74 @@ use App\Models\Property;
 
 class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithCharts, ShouldAutoSize
 {
-    private $dailyData;
+    /** @var \Illuminate\Support\Collection */
+    private $dailyData;       // collection of arrays: date, revenue, occupancy, arr, rooms_sold
     private $kpiData;
-    private $monthName;
+    private $monthName;       // e.g. "October 2025"
     private $property;
-    private $miceBookings; // Properti baru untuk menampung data MICE
+    /** @var \Illuminate\Support\Collection */
+    private $miceBookings;
 
-    // Constructor diubah untuk menerima $miceBookings
     public function __construct(string $monthName, $dailyData, $kpiData, $property, Collection $miceBookings)
     {
-        $this->monthName = $monthName;
-        $this->dailyData = $dailyData;
-        $this->kpiData   = $kpiData;
-        $this->property  = $property;
-        $this->miceBookings = $miceBookings; // Simpan data MICE
+        $this->monthName    = $monthName;
+        $this->dailyData    = $dailyData instanceof Collection ? $dailyData : collect($dailyData);
+        $this->kpiData      = $kpiData;
+        $this->property     = $property;
+        $this->miceBookings = $miceBookings;
+
+        // Pastikan data harian lengkap dari tanggal 1 s/d akhir bulan (agar chart mulai 01)
+        $this->dailyData = $this->padDailyDataToFullMonth($this->dailyData, $this->monthName);
     }
 
-    // ---- Helper Functions ----
+    /**
+     * Memastikan $dailyData berisi semua tanggal 1..akhir bulan berdasarkan $monthName.
+     * Jika suatu tanggal tidak ada, diisi nilai 0.
+     */
+    private function padDailyDataToFullMonth(Collection $dailyData, string $monthName): Collection
+    {
+        // Contoh monthName: "October 2025" --> aman di-parse Carbon
+        $firstDay = Carbon::parse("1 {$monthName}")->startOfMonth();
+        $lastDay  = $firstDay->copy()->endOfMonth();
+
+        // Normalisasi index by Y-m-d agar pencarian cepat
+        $indexed = collect();
+        foreach ($dailyData as $row) {
+            // Terima format 'YYYY-MM-DD' atau 'DD MMM YYYY'
+            $dateStr = $row['date'];
+            try {
+                $key = Carbon::parse($dateStr)->format('Y-m-d');
+            } catch (\Exception $e) {
+                $key = $firstDay->format('Y-m-d'); // fallback agar tidak error
+            }
+            $indexed[$key] = [
+                'date'       => Carbon::parse($key)->isoFormat('DD MMM YYYY'),
+                'revenue'    => (float)($row['revenue'] ?? 0),
+                'occupancy'  => (float)($row['occupancy'] ?? 0),
+                'arr'        => (float)($row['arr'] ?? 0),
+                'rooms_sold' => (int)($row['rooms_sold'] ?? 0),
+            ];
+        }
+
+        // Bangun koleksi lengkap 1..end
+        $filled = collect();
+        for ($d = $firstDay->copy(); $d->lte($lastDay); $d->addDay()) {
+            $key = $d->format('Y-m-d');
+            if (isset($indexed[$key])) {
+                $filled->push($indexed[$key]);
+            } else {
+                $filled->push([
+                    'date'       => $d->isoFormat('DD MMM YYYY'),
+                    'revenue'    => 0.0,
+                    'occupancy'  => 0.0, // dalam fraksi (0..1) nanti diformat %
+                    'arr'        => 0.0,
+                    'rooms_sold' => 0,
+                ]);
+            }
+        }
+        return $filled;
+    }
+
     private function hexToArgb(string $hex): string
     {
         $hex = ltrim(trim($hex), '#');
@@ -56,39 +107,44 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
         $g = hexdec(substr($hex, 2, 2));
         $b = hexdec(substr($hex, 4, 2));
         $factor = max(-100, min(100, $percent)) / 100.0;
-        $adjust = function ($c) use ($factor) {
+        $adj = function ($c) use ($factor) {
             $target = ($factor >= 0) ? 255 : 0;
             $delta  = ($target - $c) * abs($factor);
             $val    = (int) round($c + $delta);
             return max(0, min(255, $val));
         };
-        $r = $adjust($r);
-        $g = $adjust($g);
-        $b = $adjust($b);
-        return sprintf('#%02X%02X%02X', $r, $g, $b);
+        return sprintf('#%02X%02X%02X', $adj($r), $adj($g), $adj($b));
     }
 
     private function getKpiItems(): array
     {
         return [
-            'Total Pendapatan' => (float) $this->kpiData['totalRevenue'],
-            'Okupansi Rata-rata' => ($this->kpiData['avgOccupancy'] > 0) ? (float) $this->kpiData['avgOccupancy'] / 100 : 0,
-            'Average Room Rate (ARR)' => (float) $this->kpiData['avgArr'],
+            'Total Pendapatan'                    => (float) $this->kpiData['totalRevenue'],
+            'Okupansi Rata-rata'                  => ($this->kpiData['avgOccupancy'] > 0) ? (float) $this->kpiData['avgOccupancy'] / 100 : 0,
+            'Average Room Rate (ARR)'             => (float) $this->kpiData['avgArr'],
             'Revenue Per Available Room (RevPAR)' => (float) $this->kpiData['revPar'],
-            'Resto Revenue Per Room (Sold)' => (float) $this->kpiData['restoRevenuePerRoom'],
+            'Resto Revenue Per Room (Sold)'       => (float) $this->kpiData['restoRevenuePerRoom'],
         ];
     }
 
     private function getRevenueDetails(): array
     {
-        return array_merge($this->kpiData['revenueBreakdown'], [
-            'Total Pendapatan Kamar' => (float) $this->kpiData['totalRoomRevenue'], ' ' => null,
-            'Breakfast' => (float) $this->kpiData['totalBreakfastRevenue'],
-            'Lunch' => (float) $this->kpiData['totalLunchRevenue'],
-            'Dinner' => (float) $this->kpiData['totalDinnerRevenue'],
-            'Total F&B' => (float) $this->kpiData['totalFbRevenue'],
-            'Lain-lain' => (float) $this->kpiData['totalOtherRevenue'],
-        ]);
+        $revenueDetails = $this->kpiData['roomRevenueBreakdown'] ?? [];
+        $revenueDetails['Total Pendapatan Kamar'] = (float) ($this->kpiData['totalRoomRevenue'] ?? 0);
+        $revenueDetails[' '] = null; // spacer
+
+        $fbBreakdown = $this->kpiData['fbRevenueBreakdown'] ?? [];
+        foreach ($fbBreakdown as $key => $value) {
+            if ($value > 0 || $key === 'Breakfast Lain') {
+                $revenueDetails[$key] = (float) $value;
+            }
+        }
+        $revenueDetails['Total F&B'] = (float) ($this->kpiData['totalFbRevenue'] ?? 0);
+        if (!empty($this->kpiData['miceRevenue'])) {
+            $revenueDetails['MICE/Event'] = (float) $this->kpiData['miceRevenue'];
+        }
+        $revenueDetails['Lain-lain'] = (float) ($this->kpiData['totalOtherRevenue'] ?? 0);
+        return $revenueDetails;
     }
 
     private function getRoomsSoldDetails(): array
@@ -106,14 +162,16 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
     public function array(): array
     {
         $data = [];
+
+        // Header utama
         $data[] = ['Laporan Analisis Kinerja (KPI)'];
         $data[] = ['Properti: ' . ($this->property->name ?? 'Semua Properti')];
         $data[] = ['Bulan: ' . $this->monthName];
-        $data[] = []; // Spacer
+        $data[] = []; // spacer visual
         $data[] = ['METRIK UTAMA', null, null, 'RINCIAN PENDAPATAN', null, null, 'RINCIAN KAMAR TERJUAL', null];
 
-        $kpiItems = $this->getKpiItems();
-        $revenueDetails = $this->getRevenueDetails();
+        $kpiItems         = $this->getKpiItems();
+        $revenueDetails   = $this->getRevenueDetails();
         $roomsSoldDetails = $this->getRoomsSoldDetails();
         $maxRows = max(count($kpiItems), count($revenueDetails), count($roomsSoldDetails));
 
@@ -121,15 +179,16 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
             $data[] = [
                 array_keys($kpiItems)[$i] ?? null,
                 isset(array_keys($kpiItems)[$i]) ? $kpiItems[array_keys($kpiItems)[$i]] : null, null,
+
                 array_keys($revenueDetails)[$i] ?? null,
                 isset(array_keys($revenueDetails)[$i]) ? $revenueDetails[array_keys($revenueDetails)[$i]] : null, null,
+
                 array_keys($roomsSoldDetails)[$i] ?? null,
                 isset(array_keys($roomsSoldDetails)[$i]) ? $roomsSoldDetails[array_keys($roomsSoldDetails)[$i]] : null,
             ];
         }
-        
-        // --- Tabel Rincian Harian ---
-        $data[] = []; // Spacer
+
+        // === Tabel Rincian Harian ===
         $data[] = ['Tabel Rincian Harian'];
         $data[] = ['Tanggal', 'Pendapatan', 'Okupansi (%)', 'ARR', 'Kamar Terjual'];
         foreach ($this->dailyData as $daily) {
@@ -142,13 +201,14 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
             ];
         }
 
-        // --- [PERBAIKAN] Tabel Rincian MICE ---
+        // >>> Sisipkan PERSIS 2 baris kosong setelah data harian terakhir
+        $data[] = array_fill(0, 5, '');
+        $data[] = array_fill(0, 5, '');
+
+        // === Tabel Rincian MICE (opsional) ===
         if ($this->miceBookings->isNotEmpty()) {
-            $data[] = []; // Spacer
-            $data[] = []; // Spacer
-            $data[] = []; // Spacer
-            $data[] = ['Rincian MICE/Event'];
-            $data[] = ['Nama Klien', 'Properti', 'Tanggal Event', 'Total Harga'];
+            $data[] = ['Rincian MICE/Event']; // judul
+            $data[] = ['Nama Klien', 'Properti', 'Tanggal Event', 'Total Harga']; // header
             foreach ($this->miceBookings as $booking) {
                 $data[] = [
                     $booking->client_name,
@@ -162,37 +222,77 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
         return $data;
     }
 
+    /** Cari baris yang berisi $text pada kolom $col (default A). */
+    private function findRowByText(Worksheet $sheet, string $text, string $col = 'A'): ?int
+    {
+        $last = $sheet->getHighestRow();
+        for ($r = 1; $r <= $last; $r++) {
+            if (trim((string) $sheet->getCell("{$col}{$r}")->getValue()) === $text) {
+                return $r;
+            }
+        }
+        return null;
+    }
+
     public function styles(Worksheet $sheet)
     {
-        // --- Formats & Styles ---
+        // Format angka
         $currencyFormat = '_("Rp"* #,##0_);_("Rp"* \(#,##0\);_("Rp"* "-"??_);_(@_)';
         $percentFormat  = '0.00%';
         $numberFormat   = '#,##0';
+
+        // Border & warna
         $borderStyle = \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN;
         $allBorders  = ['allBorders' => ['borderStyle' => $borderStyle]];
-        $baseHex   = ($this->property && !empty($this->property->chart_color)) ? $this->property->chart_color : '#1F4E78';
-        $headerHex = $baseHex;
-        $titleHex  = $this->adjustHex($baseHex, -25);
-        $headerStyle = ['font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']], 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER, 'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER], 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => $this->hexToArgb($headerHex)]], 'borders' => $allBorders];
-        $mainTitleStyle = ['font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']], 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => $this->hexToArgb($titleHex)]]];
+        $baseHex     = ($this->property && !empty($this->property->chart_color)) ? $this->property->chart_color : '#1F4E78';
+        $headerHex   = $baseHex;
+        $titleHex    = $this->adjustHex($baseHex, -25);
 
-        // --- Apply Title Styles ---
+        $headerStyle = [
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'alignment' => [
+                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER
+            ],
+            'fill'      => [
+                'fillType'   => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['argb' => $this->hexToArgb($headerHex)]
+            ],
+            'borders'   => $allBorders
+        ];
+
+        $mainTitleStyle = [
+            'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
+            'fill' => [
+                'fillType'   => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['argb' => $this->hexToArgb($titleHex)]
+            ],
+        ];
+
+        // Header besar
         $sheet->mergeCells('A1:H1')->getStyle('A1')->applyFromArray($mainTitleStyle)->getFont()->setSize(16);
         $sheet->mergeCells('A2:H2')->getStyle('A2')->applyFromArray($mainTitleStyle);
         $sheet->mergeCells('A3:H3')->getStyle('A3')->applyFromArray($mainTitleStyle);
 
-        // --- Apply KPI Block Styles ---
-        $maxRows = max(count($this->getKpiItems()), count($this->getRevenueDetails()), count($this->getRoomsSoldDetails()));
+        // Format B5 & E5 ke Rupiah
+        $sheet->getStyle('B5')->getNumberFormat()->setFormatCode($currencyFormat);
+        $sheet->getStyle('E5')->getNumberFormat()->setFormatCode($currencyFormat);
+
+        // Blok KPI/Details
+        $maxRows        = max(count($this->getKpiItems()), count($this->getRevenueDetails()), count($this->getRoomsSoldDetails()));
         $headerRow3Col  = 5;
         $firstDetailRow = 6;
         $lastDetailRow  = 5 + $maxRows;
-        
+
         $sheet->getStyle("A{$headerRow3Col}:H{$headerRow3Col}")->getFont()->setBold(true);
         $sheet->getStyle("A{$headerRow3Col}:B{$headerRow3Col}")->getBorders()->applyFromArray($allBorders);
         $sheet->getStyle("D{$headerRow3Col}:E{$headerRow3Col}")->getBorders()->applyFromArray($allBorders);
         $sheet->getStyle("G{$headerRow3Col}:H{$headerRow3Col}")->getBorders()->applyFromArray($allBorders);
 
         $sheet->getStyle("B{$firstDetailRow}:B{$lastDetailRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+        $sheet->getStyle("E{$firstDetailRow}:E{$lastDetailRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+        $sheet->getStyle("H{$firstDetailRow}:H{$lastDetailRow}")->getNumberFormat()->setFormatCode($numberFormat);
+
         for ($r = $firstDetailRow; $r <= $lastDetailRow; $r++) {
             if (trim((string) $sheet->getCell("A{$r}")->getValue()) !== '') {
                 $sheet->getStyle("A{$r}:B{$r}")->getBorders()->applyFromArray($allBorders);
@@ -203,7 +303,6 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
             if (trim((string) $sheet->getCell("D{$r}")->getValue()) !== '' && trim((string) $sheet->getCell("D{$r}")->getValue()) !== ' ') {
                 $style = $sheet->getStyle("D{$r}:E{$r}");
                 $style->getBorders()->applyFromArray($allBorders);
-                $style->getNumberFormat()->setFormatCode($currencyFormat);
                 if (in_array(trim((string) $sheet->getCell("D{$r}")->getValue()), ['Total Pendapatan Kamar', 'Total F&B'])) {
                     $style->getFont()->setBold(true);
                 }
@@ -211,43 +310,57 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
             if (trim((string) $sheet->getCell("G{$r}")->getValue()) !== '') {
                 $style = $sheet->getStyle("G{$r}:H{$r}");
                 $style->getBorders()->applyFromArray($allBorders);
-                $style->getNumberFormat()->setFormatCode($numberFormat);
                 if (trim((string) $sheet->getCell("G{$r}")->getValue()) === 'Total Kamar Terjual') {
                     $style->getFont()->setBold(true);
                 }
             }
         }
 
-        // --- Apply Daily Details Table Styles ---
-        $dailyTitleRow = $lastDetailRow + 0;
-        $dailyHeaderRow = $dailyTitleRow + 1;
-        $firstDataRow   = $dailyHeaderRow + 1;
-        $dataCount      = (int) $this->dailyData->count();
-        $lastDataRow    = $dailyHeaderRow + $dataCount;
+        // === Tabel Harian (deteksi baris dinamis) ===
+        $dailyTitleRow = $this->findRowByText($sheet, 'Tabel Rincian Harian', 'A');
+        if ($dailyTitleRow !== null) {
+            $dailyHeaderRow = $dailyTitleRow + 1;
+            $firstDataRow   = $dailyHeaderRow + 1;
+            $dataCount      = (int) $this->dailyData->count();
+            $lastDataRow    = $firstDataRow + $dataCount - 1;
 
-        $sheet->getStyle("A{$dailyTitleRow}:E{$dailyTitleRow}")->getFont()->setBold(true);
-        $sheet->getStyle("A{$dailyHeaderRow}:E{$dailyHeaderRow}")->applyFromArray($headerStyle);
+            // Judul & header
+            $sheet->getStyle("A{$dailyTitleRow}:E{$dailyTitleRow}")->getFont()->setBold(true);
+            $sheet->getStyle("A{$dailyHeaderRow}:E{$dailyHeaderRow}")->applyFromArray($headerStyle);
 
-        if ($dataCount > 0) {
-            $sheet->getStyle("A{$firstDataRow}:E{$lastDataRow}")->getBorders()->applyFromArray($allBorders);
-            $sheet->getStyle("B{$firstDataRow}:B{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
-            $sheet->getStyle("C{$firstDataRow}:C{$lastDataRow}")->getNumberFormat()->setFormatCode($percentFormat);
-            $sheet->getStyle("D{$firstDataRow}:D{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
-            $sheet->getStyle("E{$firstDataRow}:E{$lastDataRow}")->getNumberFormat()->setFormatCode($numberFormat);
+            // Bodi
+            if ($dataCount > 0) {
+                $sheet->getStyle("A{$firstDataRow}:E{$lastDataRow}")->getBorders()->applyFromArray($allBorders);
+                $sheet->getStyle("B{$firstDataRow}:B{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+                $sheet->getStyle("C{$firstDataRow}:C{$lastDataRow}")->getNumberFormat()->setFormatCode($percentFormat);
+                $sheet->getStyle("D{$firstDataRow}:D{$lastDataRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+                $sheet->getStyle("E{$firstDataRow}:E{$lastDataRow}")->getNumberFormat()->setFormatCode($numberFormat);
+            }
         }
 
-        // --- [PERBAIKAN] Apply MICE Table Styles ---
+        // === Tabel MICE/Event (header merah & format) ===
         if ($this->miceBookings->isNotEmpty()) {
-            $miceTitleRow = $lastDataRow + 1;
-            $miceHeaderRow = $miceTitleRow + 1;
-            $firstMiceRow = $miceHeaderRow + 1;
-            $miceCount = $this->miceBookings->count();
-            $lastMiceRow = $miceHeaderRow + $miceCount;
+            $miceTitleRow = $this->findRowByText($sheet, 'Rincian MICE/Event', 'A');
+            if ($miceTitleRow !== null) {
+                // Judul bold
+                $sheet->getStyle("A{$miceTitleRow}:D{$miceTitleRow}")->getFont()->setBold(true);
 
-            $sheet->getStyle("A{$miceTitleRow}:D{$miceTitleRow}")->getFont()->setBold(true);
-            $sheet->getStyle("A{$miceHeaderRow}:D{$miceHeaderRow}")->applyFromArray($headerStyle);
-            $sheet->getStyle("A{$firstMiceRow}:D{$lastMiceRow}")->getBorders()->applyFromArray($allBorders);
-            $sheet->getStyle("D{$firstMiceRow}:D{$lastMiceRow}")->getNumberFormat()->setFormatCode($currencyFormat);
+                // Header 1 baris di bawah judul
+                $miceHeaderRow = $miceTitleRow + 1;
+                $sheet->getStyle("A{$miceHeaderRow}:D{$miceHeaderRow}")->applyFromArray($headerStyle);
+                $sheet->getStyle("A{$miceHeaderRow}:D{$miceHeaderRow}")->getBorders()->applyFromArray($allBorders);
+
+                // Body
+                $miceCount = $this->miceBookings->count();
+                if ($miceCount > 0) {
+                    $firstMiceRow = $miceHeaderRow + 1;
+                    $lastMiceRow  = $firstMiceRow + $miceCount - 1;
+
+                    $sheet->getStyle("A{$firstMiceRow}:D{$lastMiceRow}")->getBorders()->applyFromArray($allBorders);
+                    $sheet->getStyle("D{$firstMiceRow}:D{$lastMiceRow}")
+                          ->getNumberFormat()->setFormatCode($currencyFormat);
+                }
+            }
         }
     }
 
@@ -256,29 +369,67 @@ class KpiAnalysisMonthlySheet implements FromArray, WithTitle, WithStyles, WithC
         if ($this->dailyData->isEmpty()) {
             return [];
         }
-    
-        $maxRows = max(count($this->getKpiItems()), count($this->getRevenueDetails()), count($this->getRoomsSoldDetails()));
-        $lastDetailRow  = 5 + $maxRows;
-        
-        // Sesuaikan posisi tabel harian
-        $dailyHeaderRow = $lastDetailRow + 3; // +1 spacer, +1 judul
-        $firstDataRow   = $dailyHeaderRow + 1;
+
+        // Posisi berdasarkan struktur array(): Judul -> Header -> Data
+        $maxRows       = max(count($this->getKpiItems()), count($this->getRevenueDetails()), count($this->getRoomsSoldDetails()));
+        $lastDetailRow = 5 + $maxRows;
+
+        $dailyTitleRow  = $lastDetailRow + 1;         // "Tabel Rincian Harian"
+        $dailyHeaderRow = $dailyTitleRow + 1;         // header tabel
+        $firstDataRow   = $dailyHeaderRow + 1;        // data pertama = tanggal 01
         $dataRowCount   = $this->dailyData->count();
-        $lastDataRow    = $dailyHeaderRow + $dataRowCount;
-        $sheetName      = $this->title();
-    
-        $categories = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$A\${$firstDataRow}:\$A\${$lastDataRow}", null, $dataRowCount)];
-        $labels = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_STRING, "'{$sheetName}'!\$B\${$dailyHeaderRow}", null, 1)];
-        $values = [new DataSeriesValues(DataSeriesValues::DATASERIES_TYPE_NUMBER, "'{$sheetName}'!\$B\${$firstDataRow}:\$B\${$lastDataRow}", null, $dataRowCount)];
-    
-        $series = new DataSeries(DataSeries::TYPE_BARCHART, DataSeries::GROUPING_CLUSTERED, range(0, count($values) - 1), $labels, $categories, $values);
+        $lastDataRow    = $firstDataRow + $dataRowCount - 1;
+
+        $sheetName = $this->title();
+
+        $categories = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_STRING,
+                "'{$sheetName}'!\$A\${$firstDataRow}:\$A\${$lastDataRow}",
+                null,
+                $dataRowCount
+            )
+        ];
+        $labels = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_STRING,
+                "'{$sheetName}'!\$B\${$dailyHeaderRow}",
+                null,
+                1
+            )
+        ];
+        $values = [
+            new DataSeriesValues(
+                DataSeriesValues::DATASERIES_TYPE_NUMBER,
+                "'{$sheetName}'!\$B\${$firstDataRow}:\$B\${$lastDataRow}",
+                null,
+                $dataRowCount
+            )
+        ];
+
+        $series = new DataSeries(
+            DataSeries::TYPE_BARCHART,
+            DataSeries::GROUPING_CLUSTERED,
+            range(0, count($values) - 1),
+            $labels,
+            $categories,
+            $values
+        );
+        $series->setPlotDirection(DataSeries::DIRECTION_COL);
+
         $plot   = new PlotArea(null, [$series]);
         $legend = new Legend(Legend::POSITION_BOTTOM, null, false);
         $title  = new Title('Pendapatan Harian');
-        $chart  = new Chart('chart_' . str_replace(' ', '_', $this->monthName), $title, $legend, $plot);
+
+        $chart = new Chart(
+            'chart_' . str_replace(' ', '_', $this->monthName),
+            $title,
+            $legend,
+            $plot
+        );
         $chart->setTopLeftPosition('J5');
         $chart->setBottomRightPosition('T25');
-    
+
         return [$chart];
     }
 }

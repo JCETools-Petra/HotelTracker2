@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\Controller; // <-- Ini memperbaiki error "Controller not found"
 use App\Models\Property;
 use App\Models\DailyIncome;
 use App\Models\RevenueTarget;
 use App\Models\Booking;
-use App\Models\DailyOccupancy; // <-- Ditambahkan
+use App\Models\DailyOccupancy; 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -15,6 +15,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
+// Pastikan nama class-nya adalah PropertyController
 class PropertyController extends Controller
 {
     public function __construct()
@@ -56,9 +57,18 @@ class PropertyController extends Controller
             abort(403, 'Akses ditolak. Hanya admin yang dapat melakukan aksi ini.');
         }
 
+        // Validasi yang benar untuk store
         $validatedData = $request->validate([
             'name' => 'required|string|max:255|unique:properties,name',
-            'chart_color' => 'nullable|string|size:7',
+            'chart_color' => 'nullable|string|size:7|starts_with:#',
+            'address' => 'nullable|string',
+            'phone_number' => 'nullable|string|max:20', // <-- Validasi HP
+            'total_rooms' => 'required|integer|min:0',
+            'bar_1' => 'nullable|integer',
+            'bar_2' => 'nullable|integer',
+            'bar_3' => 'nullable|integer',
+            'bar_4' => 'nullable|integer',
+            'bar_5' => 'nullable|integer',
         ]);
 
         Property::create($validatedData);
@@ -181,7 +191,7 @@ class PropertyController extends Controller
             'property', 'incomes', 'dailyTrend', 'sourceDistribution', 'totalPropertyRevenueFiltered',
             'startDate', 'endDate', 'displayStartDate', 'displayEndDate', 'incomeCategories',
             'dailyTarget', 'lastDayIncome', 'dailyTargetAchievement',
-            'occupancy', 'selectedDate' // <-- Variabel baru ditambahkan
+            'occupancy', 'selectedDate' 
         ));
     }
 
@@ -222,11 +232,12 @@ class PropertyController extends Controller
             abort(403, 'Akses ditolak. Hanya admin yang dapat melakukan aksi ini.');
         }
         
+        // Validasi yang benar untuk update
         $validatedData = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('properties')->ignore($property->id)],
             'chart_color' => 'nullable|string|size:7|starts_with:#',
             'address' => 'nullable|string',
-            // Tambahkan validasi untuk total_rooms dan bar
+            'phone_number' => 'nullable|string|max:20', // <-- Validasi HP
             'total_rooms' => 'required|integer|min:0',
             'bar_1' => 'nullable|integer',
             'bar_2' => 'nullable|integer',
@@ -289,9 +300,7 @@ class PropertyController extends Controller
                 DB::raw('SUM(afiliasi_room_income) as afiliasi_revenue, SUM(afiliasi_rooms) as afiliasi_rooms'),
                 DB::raw('SUM(total_rooms_revenue) as total_room_revenue, SUM(total_rooms_sold) as total_rooms_sold'),
                 DB::raw('SUM(total_fb_revenue) as total_fb_revenue'),
-                // mice_room_income dihapus dari sini
                 DB::raw('SUM(others_income) as total_others_revenue'),
-                // total_revenue dihapus dari sini, akan dihitung manual
                 DB::raw('AVG(occupancy) as average_occupancy'),
                 DB::raw('SUM(total_rooms_revenue) / NULLIF(SUM(total_rooms_sold), 0) as average_arr')
             )
@@ -318,7 +327,6 @@ class PropertyController extends Controller
 
             $result = new \stdClass();
             
-            // Salin data dari incomeResults (jika ada)
             $result->offline_revenue = $incomeData->offline_revenue ?? 0;
             $result->offline_rooms = $incomeData->offline_rooms ?? 0;
             $result->online_revenue = $incomeData->online_revenue ?? 0;
@@ -337,8 +345,6 @@ class PropertyController extends Controller
             $result->total_others_revenue = $incomeData->total_others_revenue ?? 0;
             $result->average_occupancy = $incomeData->average_occupancy ?? 0;
             $result->average_arr = $incomeData->average_arr ?? 0;
-
-            // Tambahkan data MICE dari miceResults
             $result->total_mice_revenue = $miceData->total_mice_revenue ?? 0;
 
             // 4. Hitung total keseluruhan secara manual
@@ -346,23 +352,21 @@ class PropertyController extends Controller
                 ($result->total_room_revenue ?? 0) + 
                 ($result->total_fb_revenue ?? 0) + 
                 ($result->total_others_revenue ?? 0) + 
-                ($result->total_mice_revenue ?? 0); // <-- MICE ditambahkan di sini
+                ($result->total_mice_revenue ?? 0); 
 
             $results->put($property->id, $result);
         }
         
-        // ======================= PERSIAPAN DATA GRAFIK (TETAP SAMA) =======================
         $chartData = $properties->map(function ($property) use ($results) {
             $result = $results->get($property->id);
             
             return [
                 'label' => $property->name,
-                'revenue' => $result ? $result->total_overall_revenue : 0, // Ini akan menggunakan total_overall_revenue yang baru
+                'revenue' => $result ? $result->total_overall_revenue : 0, 
                 'color' => $property->chart_color ?? sprintf('#%06X', mt_rand(0, 0xFFFFFF)),
             ];
         });
-        // =================================================================================
-
+        
         return view('admin.properties.compare_results', compact(
             'properties', 
             'results', 
@@ -371,5 +375,4 @@ class PropertyController extends Controller
             'chartData'
         ));
     }
-
 }

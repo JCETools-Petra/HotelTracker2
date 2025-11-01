@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+// HAPUS 'use App\Events\OccupancyUpdated;' DARI SINI
 
 class Property extends Model
 {
@@ -15,12 +16,14 @@ class Property extends Model
         'name',
         'chart_color',
         'address',
-        'total_rooms', // <-- TAMBAHKAN INI
+        'phone_number',
+        'total_rooms', 
         'bar_1',
         'bar_2',
         'bar_3',
         'bar_4',
         'bar_5',
+        'bar_active', // <-- Kolom 'bar_active' tetap ada di $fillable
     ];
     
     public function pricingRule(): HasOne
@@ -65,13 +68,12 @@ class Property extends Model
         return $this->hasMany(RoomType::class);
     }
 
-    /**
-     * ======================= INI YANG PERLU DITAMBAHKAN =======================
-     * Mendefinisikan bahwa satu Property memiliki banyak Inventory.
-     */
     public function inventories(): HasMany
     {
         return $this->hasMany(Inventory::class);
     }
-    // =========================================================================
+
+    // ==========================================================
+    // METHOD 'booted()' YANG SEBELUMNYA ADA DI SINI, SEKARANG DIHAPUS
+    // ==========================================================
 }

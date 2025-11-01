@@ -47,15 +47,17 @@ class DashboardController extends Controller
             $occupiedRooms = $occupancyToday ? $occupancyToday->occupied_rooms : 0;
             
             // 2. Tentukan level BAR yang aktif berdasarkan JUMLAH KAMAR
+            //    Panggilan ini sekarang menggunakan method dari Trait
             $activeBarLevel = $this->getActiveBarLevel($occupiedRooms, $selectedProperty);
             
             // Siapkan info untuk ditampilkan di view
             $currentOccupancyInfo = [
                 'occupied_rooms' => $occupiedRooms,
-                'active_bar' => $activeBarLevel,
+                'active_bar' => $selectedProperty->bar_active ?? $this->getActiveBarName($activeBarLevel), // Gunakan bar_active yg tersimpan
             ];
 
             // 3. Hitung harga yang berlaku untuk setiap tipe kamar
+            //    Panggilan ini sekarang menggunakan method dari Trait
             $roomTypePrices = $selectedProperty->roomTypes->map(function ($roomType) use ($activeBarLevel) {
                 return [
                     'name' => $roomType->name,
@@ -68,46 +70,6 @@ class DashboardController extends Controller
 
         return view('ecommerce.dashboard', compact('properties', 'selectedProperty', 'roomTypePrices', 'selectedPropertyId', 'currentOccupancyInfo'));
     }
-
-    /**
-     * PERBAIKAN: Menentukan level BAR berdasarkan JUMLAH KAMAR.
-     */
-    private function getActiveBarLevel(int $occupiedRooms, Property $property): int
-    {
-        // Membandingkan jumlah kamar terisi dengan ambang batas bar
-        if ($occupiedRooms <= $property->bar_1) return 1;
-        if ($occupiedRooms <= $property->bar_2) return 2;
-        if ($occupiedRooms <= $property->bar_3) return 3;
-        if ($occupiedRooms <= $property->bar_4) return 4;
-        
-        // Jika di atas bar_4, dianggap BAR 5
-        return 5;
-    }
-
-    /**
-     * Menghitung harga BAR yang aktif untuk satu tipe kamar.
-     */
-    private function calculateActiveBarPrice(RoomType $roomType, int $activeBarLevel)
-    {
-        $rule = $roomType->pricingRule;
-        if (!$rule || !$rule->starting_bar) {
-            return $roomType->bottom_rate;
-        }
-
-        if ($activeBarLevel < $rule->starting_bar) {
-            return $rule->bottom_rate;
-        }
-
-        $price = $rule->bottom_rate;
-        $increaseFactor = 1 + ($rule->percentage_increase / 100);
-
-        for ($i = 0; $i < ($activeBarLevel - $rule->starting_bar); $i++) {
-            $price *= $increaseFactor;
-        }
-        
-        return $price;
-    }
-
 
     public function calendar()
     {

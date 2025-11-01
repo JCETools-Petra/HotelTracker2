@@ -11,7 +11,16 @@
                         $fnbCategories = ['breakfast_income', 'lunch_income', 'dinner_income'];
 
                         $totalRoomRevenue = collect($roomCategories)->sum(fn($key) => $property->{'total_' . $key} ?? 0);
-                        $totalFnbRevenue = collect($fnbCategories)->sum(fn($key) => $property->{'total_' . $key} ?? 0);
+                        
+                        // ==========================================================
+                        // >> AWAL PERUBAHAN 1 (BARIS INI DIUBAH) <<
+                        // (Tambahkan 'other_breakfast_revenue' ke total F&B)
+                        // ==========================================================
+                        $totalFnbRevenue = collect($fnbCategories)->sum(fn($key) => $property->{'total_' . $key} ?? 0) + ($property->other_breakfast_revenue ?? 0);
+                        // ==========================================================
+                        // >> AKHIR PERUBAHAN 1 <<
+                        // ==========================================================
+                        
                         $totalMiceRevenue = $property->mice_revenue_breakdown->sum('total_mice_revenue') ?? 0;
                         
                         $grandTotal = $property->dailyRevenue ?? 0;
@@ -42,6 +51,7 @@
                     @endforeach
 
                     {{-- PENDAPATAN F&B --}}
+                    {{-- (Controller sudah mengatur $property->total_breakfast_income = 0 untuk Akat/Bell/Ermasu) --}}
                     @if ($totalFnbRevenue > 0)
                     <tr class="border-t border-dashed border-gray-300 dark:border-gray-600">
                         <td class="pt-3 pb-1 pr-4 font-semibold text-gray-500 dark:text-gray-400" colspan="2">
@@ -50,6 +60,7 @@
                     </tr>
                     @foreach (['breakfast_income' => 'Breakfast', 'lunch_income' => 'Lunch', 'dinner_income' => 'Dinner'] as $key => $label)
                         @php $value = $property->{'total_' . $key} ?? 0; @endphp
+                        {{-- (Ini akan otomatis menyembunyikan breakfast untuk Akat/Bell/Ermasu karena nilainya 0) --}}
                         @if ($value > 0)
                         <tr>
                             <td class="py-1.5 pr-4 pl-4">{{ $label }}</td>
@@ -62,6 +73,27 @@
                         </tr>
                         @endif
                     @endforeach
+                    
+                    {{-- ========================================================== --}}
+                    {{-- >> AWAL PERUBAHAN 2 (TAMBAHKAN BLOK INI) << --}}
+                    {{-- (Tampilkan "Breakfast Lain" jika ada nilainya) --}}
+                    {{-- ========================================================== --}}
+                    @php $valueOtherBreakfast = $property->other_breakfast_revenue ?? 0; @endphp
+                    @if ($valueOtherBreakfast > 0)
+                    <tr>
+                        <td class="py-1.5 pr-4 pl-4">Breakfast Unit Lain</td>
+                        <td class="py-1.5 text-right font-medium text-gray-700 dark:text-gray-300">
+                            <div class="flex flex-col items-end">
+                                <span>Rp {{ number_format($valueOtherBreakfast, 0, ',', '.') }}</span>
+                                <span class="text-xs text-gray-400">{{ $getPercentage($valueOtherBreakfast, $totalFnbRevenue) }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    @endif
+                    {{-- ========================================================== --}}
+                    {{-- >> AKHIR PERUBAHAN 2 << --}}
+                    {{-- ========================================================== --}}
+
                     @endif
                     
                     <tr class="border-t border-dashed border-gray-300 dark:border-gray-600">
